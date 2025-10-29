@@ -8,6 +8,9 @@ from pathlib import Path
 from config import config
 from loguru import logger
 
+# Exceções específicas para I/O error handling
+from json import JSONDecodeError
+
 
 def read_inbound_files() -> List[Dict]:
     """Lê todos os arquivos JSON da pasta inbound."""
@@ -19,8 +22,14 @@ def read_inbound_files() -> List[Dict]:
                 data = json.load(f)
                 files_data.append(data)
                 logger.info(f"Arquivo lido: {json_file.name}")
-        except Exception as e:
-            logger.error(f"Erro ao ler {json_file.name}: {e}")
+        except FileNotFoundError:
+            logger.warning(f"Arquivo não encontrado: {json_file.name}")
+        except PermissionError:
+            logger.error(f"Sem permissão para ler arquivo: {json_file.name}")
+        except JSONDecodeError as e:
+            logger.error(f"JSON corrompido em {json_file.name}: {e}")
+        except OSError as e:
+            logger.error(f"Erro de I/O ao ler {json_file.name}: {e}")
     
     return files_data
 
@@ -33,8 +42,12 @@ def write_outbound_file(filename: str, data: Dict) -> None:
         with open(file_path, 'w') as f:
             json.dump(data, f, indent=2)
         logger.info(f"Arquivo escrito: {filename}")
+    except PermissionError:
+        logger.error(f"Sem permissão para escrever arquivo: {filename}")
+    except OSError as e:
+        logger.error(f"Erro de I/O ao escrever {filename}: {e}")
     except Exception as e:
-        logger.error(f"Erro ao escrever {filename}: {e}")
+        logger.error(f"Erro inesperado ao escrever {filename}: {e}")
 
 
 def validate_client_data(data: Dict) -> bool:
