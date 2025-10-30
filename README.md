@@ -190,12 +190,9 @@ cat data/inbound/1.json | jq .
 ## Configuração Detalhada
 
 ### Variáveis de Ambiente
-O sistema usa valores padrão, mas você pode customizar criando um arquivo `.env`:
+O projeto inclui um arquivo `.env` pré-configurado com as variáveis necessárias:
 ```bash
-# Opcional: criar arquivo .env para customização
-MONGO_URI=mongodb://localhost:27017
-MONGO_DATABASE=tractian
-MONGO_COLLECTION=workorders
+MONGO_URI=mongodb://localhost:27017/tractian
 DATA_INBOUND_DIR=./data/inbound  
 DATA_OUTBOUND_DIR=./data/outbound
 ```
