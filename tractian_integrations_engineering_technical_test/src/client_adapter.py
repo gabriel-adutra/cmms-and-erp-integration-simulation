@@ -10,7 +10,7 @@ from typing import List, Dict, Optional
 from pathlib import Path
 from json import JSONDecodeError
 
-from .config import config
+from config import config
 from loguru import logger
 
 
