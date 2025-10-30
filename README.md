@@ -24,7 +24,7 @@ O sistema foi projetado com **separação clara de responsabilidades** para faci
 ### Destaques Técnicos Implementados
 - **Padrão Singleton**: Configuração centralizada com carregamento único
 - **Retry com Backoff Exponencial**: Recuperação automática de falhas temporárias (1s → 2s → 4s)
-- **Logging Estruturado**: Logs claros com métricas automáticas de performance
+- **Logging Estruturado**: Logs claros e organizados para debugging
 - **Gestão de Recursos**: Reutilização inteligente de conexões MongoDB e cleanup automático
 - **Validação Rigorosa**: Campos obrigatórios e tipos validados com mensagens de erro específicas
 - **Isolamento de Falhas**: Um arquivo com problema não interrompe o pipeline inteiro
