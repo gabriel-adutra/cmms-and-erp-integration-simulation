@@ -13,17 +13,18 @@ import asyncio
 import sys
 from pathlib import Path
 from typing import Dict, List
+from datetime import datetime
 import pytest
 from motor.motor_asyncio import AsyncIOMotorClient
 
 # Adicionar src ao path para imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from src.config import config
-from src.main import main, integration_pipeline, IntegrationPipeline
-from src.translator import data_translator, client_to_tracos, tracos_to_client
-from src.client_adapter import client_adapter
-from src.tracos_adapter import tracos_adapter
+from config import config
+from main import main, integration_pipeline, IntegrationPipeline
+from translator import data_translator, client_to_tracos, tracos_to_client
+from client_adapter import client_adapter
+from tracos_adapter import tracos_adapter
 
 
 class IntegrationTestHelper:
@@ -275,8 +276,19 @@ async def validate_data_integrity():
                 assert outbound_value == True, \
                     f"isPending deve ser true quando todos os status de entrada eram false no arquivo {i}"
             else:
-                assert inbound_value == outbound_value, \
-                    f"Campo {field} diferente no arquivo {i}: {inbound_value} != {outbound_value}"
+                # Tratamento especial para campos de data que podem ter precisão diferente
+                if field in ['creationDate', 'lastUpdateDate', 'deletedDate'] and inbound_value and outbound_value:
+                    # Comparar apenas até os segundos, ignorando diferenças de microsegundos
+                    inbound_dt = datetime.fromisoformat(inbound_value.replace('Z', '+00:00'))
+                    outbound_dt = datetime.fromisoformat(outbound_value.replace('Z', '+00:00'))
+                    
+                    # Diferença máxima aceitável: 1 segundo (MongoDB pode arredondar microsegundos)
+                    diff = abs((inbound_dt - outbound_dt).total_seconds())
+                    assert diff < 1.0, \
+                        f"Campo {field} com diferença de tempo muito grande no arquivo {i}: {inbound_value} != {outbound_value}"
+                else:
+                    assert inbound_value == outbound_value, \
+                        f"Campo {field} diferente no arquivo {i}: {inbound_value} != {outbound_value}"
         
         # Validar campo isActive presente no output (gerado pelo DataTranslator)
         assert 'isActive' in outbound_data, f"Campo isActive ausente no workorder_{i}.json"
@@ -352,14 +364,11 @@ def test_field_mapping_correctness():
         
         # Fechar conexão adequadamente
         await tracos_adapter.close_connection()
-        
-        # Teste adicional: validar mapeamento de status prioritário
-        await test_status_priority_mapping()
     
     asyncio.run(_run_test())
 
 
-async def test_status_priority_mapping():
+def test_status_priority_mapping():
     """
     Testa especificamente a lógica de prioridade de status do DataTranslator.
     
