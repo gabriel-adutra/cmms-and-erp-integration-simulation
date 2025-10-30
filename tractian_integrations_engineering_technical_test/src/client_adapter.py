@@ -1,138 +1,105 @@
-"""
-Adaptador para operações com arquivos JSON do sistema cliente.
 
-Este módulo gerencia todas as operações de entrada e saída de dados
-do sistema cliente através de arquivos JSON.
+"""
+Adaptador responsável pelas operações de I/O com arquivos JSON do cliente.
+Esse módulo centraliza todas as operações de leitura e escrita de arquivos
+JSON, garantindo tratamento consistente de erros e logging estruturado.
 """
 
 import json
 from typing import List, Dict, Optional
 from pathlib import Path
 from json import JSONDecodeError
-
 from config import config
 from loguru import logger
 
 
 class ClientAdapter:
-    """
-    Adaptador responsável pelas operações de I/O com arquivos JSON do cliente.
-    
-    Esta classe centraliza todas as operações de leitura e escrita de arquivos
-    JSON, garantindo tratamento consistente de erros e logging estruturado.
-    """
-    
+
     def __init__(self):
-        """Inicializa o adaptador com as configurações do sistema."""
+        logger.info("Inicializado ClientAdapter com as configurações do sistema...")
         self.inbound_dir = config.DATA_INBOUND_DIR
         self.outbound_dir = config.DATA_OUTBOUND_DIR
-        logger.info("ClientAdapter inicializado")
+        logger.info("ClientAdapter inicializado.")
+
     
     def read_inbound_files(self) -> List[Dict]:
-        """
-        Lê todos os arquivos JSON da pasta inbound.
-        
-        Returns:
-            Lista com os dados de todos os arquivos JSON válidos encontrados.
-            Arquivos com erro são logados mas não interrompem o processamento.
-        """
+        logger.debug("Entrando na função read_inbound_files()")
+
         files_data = []
         json_files = list(self.inbound_dir.glob("*.json"))
-        
         if not json_files:
-            logger.warning("Nenhum arquivo JSON encontrado na pasta inbound")
+            logger.warning(f"Função read_inbound_files() retornando lista vazia - nenhum arquivo JSON encontrado.")
             return files_data
         
-        logger.info(f"Processando {len(json_files)} arquivo(s) JSON")
-        
+        logger.info(f"Processando {len(json_files)} arquivo(s) JSON.")
         for json_file in json_files:
             file_data = self._read_single_file(json_file)
             if file_data is not None:
                 files_data.append(file_data)
         
-        logger.info(f"Total de arquivos processados com sucesso: {len(files_data)}")
+        logger.info(f"Função read_inbound_files() retornando {len(files_data)} arquivos válidos.")
         return files_data
     
+    
     def _read_single_file(self, file_path: Path) -> Optional[Dict]:
-        """
-        Lê um único arquivo JSON com tratamento de erros.
-        
-        Args:
-            file_path: Caminho para o arquivo JSON
-            
-        Returns:
-            Dados do arquivo se bem-sucedido, None em caso de erro
-        """
+        logger.debug(f"Entrando na função _read_single_file(). Lendo arquivo '{file_path.name}'.")
+
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                logger.debug(f"Arquivo lido com sucesso: {file_path.name}")
+                logger.debug(f"Função _read_single_file() retornando arquivo {file_path.name} lido.")
                 return data
-                
+        
         except FileNotFoundError:
-            logger.error(f"Arquivo não encontrado: {file_path.name}")
+            logger.error(f"Função _read_single_file() retornando None - arquivo não encontrado: {file_path.name}")
         except PermissionError:
-            logger.error(f"Sem permissão para ler arquivo: {file_path.name}")
+            logger.error(f"Função _read_single_file() retornando None - sem permissão para ler: {file_path.name}")
         except JSONDecodeError as e:
-            logger.error(f"JSON inválido em {file_path.name}: {e}")
+            logger.error(f"Função _read_single_file() retornando None - JSON inválido em {file_path.name}: {e}")
         except OSError as e:
-            logger.error(f"Erro de sistema ao ler {file_path.name}: {e}")
+            logger.error(f"Função _read_single_file() retornando None - erro de sistema: {file_path.name}")
         except Exception as e:
-            logger.error(f"Erro inesperado ao ler {file_path.name}: {e}")
+            logger.error(f"Função _read_single_file() retornando None - erro inesperado: {file_path.name}")
             
         return None
     
+    
     def write_outbound_file(self, filename: str, data: Dict) -> bool:
-        """
-        Escreve um arquivo JSON na pasta outbound.
+        logger.debug(f"Entrando na função write_outbound_file() com parâmetros: filename='{filename}', data com {len(data)} campos")
         
-        Args:
-            filename: Nome do arquivo a ser criado
-            data: Dados a serem escritos no formato JSON
-            
-        Returns:
-            True se bem-sucedido, False em caso de erro
-        """
         file_path = self.outbound_dir / filename
         
         try:
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
             
-            logger.info(f"Arquivo escrito com sucesso: {filename}")
+            logger.info(f"Função write_outbound_file() retornando True - arquivo {filename} criado com sucesso")
             return True
             
         except PermissionError:
-            logger.error(f"Sem permissão para escrever arquivo: {filename}")
+            logger.error(f"Função write_outbound_file() retornando False - sem permissão para escrever: {filename}")
         except OSError as e:
-            logger.error(f"Erro de sistema ao escrever {filename}: {e}")
+            logger.error(f"Função write_outbound_file() retornando False - erro de sistema ao escrever {filename}")
         except Exception as e:
-            logger.error(f"Erro inesperado ao escrever {filename}: {e}")
+            logger.error(f"Função write_outbound_file() retornando False - erro inesperado ao escrever {filename}")
             
-        return False
+        return False    
     
+
     def validate_client_data(self, data: Dict) -> bool:
-        """
-        Valida se os dados do cliente contêm todos os campos obrigatórios.
+        logger.debug(f"Entrando na função validate_client_data() com parâmetros: {data} para validação de campos obrigatórios.")
         
-        Args:
-            data: Dicionário com os dados do cliente a serem validados
-            
-        Returns:
-            True se todos os campos obrigatórios estão presentes, False caso contrário
-        """
-        required_fields = ["orderNo", "summary", "creationDate"]
         missing_fields = []
-        
+        required_fields = ["orderNo", "summary", "creationDate"]
         for field in required_fields:
             if field not in data or data[field] is None:
                 missing_fields.append(field)
         
         if missing_fields:
-            logger.warning(f"Campos obrigatórios ausentes: {', '.join(missing_fields)}")
+            logger.warning(f"Função validate_client_data() retornando False - campos ausentes: {', '.join(missing_fields)}")
             return False
         
-        logger.debug("Validação dos dados do cliente bem-sucedida")
+        logger.debug(f"Função validate_client_data() retornando True para orderNo={data.get('orderNo')}")
         return True
 
 
