@@ -1,79 +1,46 @@
-"""
-Adaptador para operações MongoDB do sistema TracOS.
-
-Este módulo gerencia todas as operações assíncronas com o banco de dados
-MongoDB, incluindo conexões, operações CRUD e sincronização de workorders.
-"""
+""" Adaptador responsável pelas operações no MongoDB do TracOS. """
 
 import asyncio
 from typing import List, Dict, Optional
 from datetime import datetime, timezone
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection
-from pymongo.errors import (
-    PyMongoError, NetworkTimeout, AutoReconnect, ServerSelectionTimeoutError,
-    ConnectionFailure, NotPrimaryError, ExecutionTimeout, WTimeoutError
-)
-
+from pymongo.errors import (PyMongoError, NetworkTimeout, AutoReconnect, ServerSelectionTimeoutError, ConnectionFailure, NotPrimaryError, ExecutionTimeout, WTimeoutError)
 from config import config
 from loguru import logger
 
 
 class TracosAdapter:
-    """
-    Adaptador responsável pelas operações assíncronas com MongoDB do TracOS.
     
-    Esta classe gerencia conexões com o banco de dados, operações CRUD
-    de workorders e implementa retry automático para falhas temporárias.
-    """
+    def __init__(self):
+        logger.info("Inicializado Classe TracosAdapter...")
+        self._mongo_client: Optional[AsyncIOMotorClient] = None
+        logger.info("Classe TracosAdapter inicializada.")
+
+    
+    async def get_mongo_client(self) -> AsyncIOMotorClient:
+        if self._mongo_client is None:
+            self._mongo_client = AsyncIOMotorClient(config.MONGO_URI)
+        return self._mongo_client
+    
+    
+    async def close_connection(self):
+        if self._mongo_client is not None:
+            self._mongo_client.close()
+            self._mongo_client = None
+    
+    
+    async def get_workorders_collection(self) -> AsyncIOMotorCollection:
+        mongo_client = await self.get_mongo_client()
+        db = mongo_client[config.MONGO_DATABASE]
+        return db[config.MONGO_COLLECTION]
+    
     
     # Exceções que merecem retry (problemas temporários de rede/conexão)
     RETRIABLE_ERRORS = (
         NetworkTimeout, AutoReconnect, ServerSelectionTimeoutError,
         ConnectionFailure, NotPrimaryError, ExecutionTimeout, WTimeoutError
     )
-    
-    def __init__(self):
-        """Inicializa o adaptador TracOS."""
-        self._client: Optional[AsyncIOMotorClient] = None
-        logger.info("TracosAdapter inicializado")
-    
-    async def get_client(self) -> AsyncIOMotorClient:
-        """
-        Obtém o cliente MongoDB reutilizando a conexão quando possível.
-        
-        Returns:
-            Cliente MongoDB configurado e conectado
-        """
-        if self._client is None:
-            self._client = AsyncIOMotorClient(config.MONGO_URI)
-            logger.debug("Nova conexão MongoDB estabelecida")
-        return self._client
-    
-    async def get_collection(self) -> AsyncIOMotorCollection:
-        """
-        Obtém a collection de workorders.
-        
-        Returns:
-            Collection MongoDB configurada para workorders
-        """
-        client = await self.get_client()
-        db = client[config.MONGO_DATABASE]
-        return db[config.MONGO_COLLECTION]
-    
     async def _retry_mongo_operation(self, operation_func, *args, **kwargs):
-        """
-        Executa operação MongoDB com retry automático para falhas temporárias.
-        
-        Args:
-            operation_func: Função assíncrona a ser executada
-            *args, **kwargs: Argumentos para a função
-            
-        Returns:
-            Resultado da operação se bem-sucedida
-            
-        Raises:
-            PyMongoError: Se a operação falhar após todas as tentativas
-        """
         max_attempts = 3
         
         for attempt in range(max_attempts):
@@ -83,28 +50,22 @@ class TracosAdapter:
             except self.RETRIABLE_ERRORS as e:
                 if attempt < max_attempts - 1:
                     wait_time = 2 ** attempt  # Backoff exponencial: 1s, 2s, 4s
-                    logger.warning(f"Tentativa {attempt + 1} falhou, tentando novamente em {wait_time}s: {e}")
+                    logger.warning(f"Tentativa {attempt + 1} falhou, retry em {wait_time}s: {e}")
                     await asyncio.sleep(wait_time)
                     continue
                 else:
-                    logger.error(f"Operação falhou após {max_attempts} tentativas: {e}")
+                    logger.error(f"MongoDB falhou após {max_attempts} tentativas: {e}")
                     raise e
                     
             except PyMongoError as e:
-                # Erro permanente - não vale a pena tentar novamente
-                logger.error(f"Erro permanente do MongoDB: {e}")
+                logger.error(f"MongoDB erro permanente: {e}")
                 raise e
+            
     
     async def read_unsynced_workorders(self) -> List[Dict]:
-        """
-        Lê todas as workorders que ainda não foram sincronizadas.
-        
-        Returns:
-            Lista de workorders com isSynced=false ou ausente
-        """
-        async def _read_operation():
+        async def _read_unsynced_workorders():
             workorders = []
-            collection = await self.get_collection()
+            collection = await self.get_workorders_collection()
             
             # Busca workorders não sincronizadas
             cursor = collection.find({"isSynced": {"$ne": True}})
@@ -114,27 +75,19 @@ class TracosAdapter:
                 doc["_id"] = str(doc["_id"])
                 workorders.append(doc)
             
-            logger.info(f"Encontradas {len(workorders)} workorder(s) não sincronizada(s)")
+            logger.debug(f"{len(workorders)} workorder(s) não sincronizada(s)")
             return workorders
         
         try:
-            return await self._retry_mongo_operation(_read_operation)
+            return await self._retry_mongo_operation(_read_unsynced_workorders)
         except PyMongoError as e:
-            logger.error(f"Falha ao ler workorders não sincronizadas: {e}")
+            logger.error(f"Erro ao ler workorders não sincronizadas: {e}")
             return []
+        
     
     async def upsert_workorder(self, workorder_data: Dict) -> bool:
-        """
-        Insere uma nova workorder ou atualiza uma existente.
-        
-        Args:
-            workorder_data: Dados da workorder a ser inserida/atualizada
-            
-        Returns:
-            True se a operação foi bem-sucedida, False caso contrário
-        """
-        async def _upsert_operation():
-            collection = await self.get_collection()
+        async def _upsert_workorder():
+            collection = await self.get_workorders_collection()
             
             # Usar 'number' como chave única para identificar workorders
             filter_query = {"number": workorder_data["number"]}
@@ -154,29 +107,19 @@ class TracosAdapter:
             )
             
             action = "inserida" if result.upserted_id else "atualizada"
-            logger.info(f"Workorder {workorder_data['number']} {action} com sucesso")
+            logger.debug(f"Workorder {workorder_data['number']} {action}")
             return True
         
         try:
-            return await self._retry_mongo_operation(_upsert_operation)
+            return await self._retry_mongo_operation(_upsert_workorder)
         except PyMongoError as e:
-            logger.error(f"Falha ao salvar workorder {workorder_data.get('number')}: {e}")
+            logger.error(f"Erro ao salvar workorder {workorder_data.get('number')}: {e}")
             return False
-    
-    async def mark_as_synced(self, number: int) -> bool:
-        """
-        Marca uma workorder como sincronizada após processamento bem-sucedido.
         
-        Args:
-            number: Número identificador da workorder
-            
-        Returns:
-            True se marcada com sucesso, False se não encontrada ou erro
-        """
-        async def _mark_operation():
-            collection = await self.get_collection()
-            
-            # Atualiza o status de sincronização
+    
+    async def mark_workorder_as_synced(self, number: int) -> bool:
+        async def _mark_workorder_as_synced():
+            collection = await self.get_workorders_collection()
             result = await collection.update_one(
                 {"number": number},
                 {
@@ -188,30 +131,22 @@ class TracosAdapter:
             )
             
             if result.modified_count > 0:
-                logger.info(f"Workorder {number} marcada como sincronizada")
+                logger.debug(f"Workorder {number} marcada como sincronizada")
                 return True
             else:
-                logger.warning(f"Workorder {number} não encontrada para marcação")
+                logger.warning(f"Workorder {number} não encontrada")
                 return False
         
         try:
-            return await self._retry_mongo_operation(_mark_operation)
+            return await self._retry_mongo_operation(_mark_workorder_as_synced)
         except PyMongoError as e:
-            logger.error(f"Falha ao marcar workorder {number} como sincronizada: {e}")
+            logger.error(f"Erro ao marcar workorder {number} como sincronizada: {e}")
             return False
-    
-    async def close_connection(self):
-        """
-        Fecha a conexão com MongoDB de forma limpa.
         
-        Deve ser chamado ao final do processamento para liberar recursos.
-        """
-        if self._client is not None:
-            self._client.close()
-            self._client = None
-            logger.info("Conexão MongoDB fechada")
+            
 
 
-# Instância global para manter compatibilidade com o código existente
+
+
 tracos_adapter = TracosAdapter()
 
