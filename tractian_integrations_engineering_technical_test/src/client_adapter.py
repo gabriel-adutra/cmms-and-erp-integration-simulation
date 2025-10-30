@@ -139,15 +139,3 @@ class ClientAdapter:
 # Instância global para manter compatibilidade com o código existente
 client_adapter = ClientAdapter()
 
-# Funções de compatibilidade (mantêm a interface original)
-def read_inbound_files() -> List[Dict]:
-    """Função de compatibilidade - usa a instância global do ClientAdapter."""
-    return client_adapter.read_inbound_files()
-
-def write_outbound_file(filename: str, data: Dict) -> None:
-    """Função de compatibilidade - usa a instância global do ClientAdapter."""
-    client_adapter.write_outbound_file(filename, data)
-
-def validate_client_data(data: Dict) -> bool:
-    """Função de compatibilidade - usa a instância global do ClientAdapter."""
-    return client_adapter.validate_client_data(data)

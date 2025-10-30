@@ -234,11 +234,3 @@ class DataTranslator:
 # Instância global para manter compatibilidade com o código existente
 data_translator = DataTranslator()
 
-# Funções de compatibilidade (mantêm a interface original)
-def client_to_tracos(client_data: Dict) -> Dict:
-    """Função de compatibilidade - usa a instância global do DataTranslator."""
-    return data_translator.client_to_tracos(client_data)
-
-def tracos_to_client(tracos_data: Dict) -> Dict:
-    """Função de compatibilidade - usa a instância global do DataTranslator."""
-    return data_translator.tracos_to_client(tracos_data)

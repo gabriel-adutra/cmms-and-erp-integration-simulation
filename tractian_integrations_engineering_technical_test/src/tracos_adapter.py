@@ -215,24 +215,3 @@ class TracosAdapter:
 # Instância global para manter compatibilidade com o código existente
 tracos_adapter = TracosAdapter()
 
-# Funções de compatibilidade (mantêm a interface original)
-async def read_unsynced_workorders() -> List[Dict]:
-    """Função de compatibilidade - usa a instância global do TracosAdapter."""
-    return await tracos_adapter.read_unsynced_workorders()
-
-async def upsert_workorder(workorder_data: Dict) -> bool:
-    """Função de compatibilidade - usa a instância global do TracosAdapter."""
-    return await tracos_adapter.upsert_workorder(workorder_data)
-
-async def mark_as_synced(number: int) -> bool:
-    """Função de compatibilidade - usa a instância global do TracosAdapter."""
-    return await tracos_adapter.mark_as_synced(number)
-
-# Funções auxiliares mantidas para compatibilidade
-async def get_mongo_client() -> AsyncIOMotorClient:
-    """Função de compatibilidade - obtém cliente via instância global."""
-    return await tracos_adapter.get_client()
-
-async def get_collection() -> AsyncIOMotorCollection:
-    """Função de compatibilidade - obtém collection via instância global."""
-    return await tracos_adapter.get_collection()

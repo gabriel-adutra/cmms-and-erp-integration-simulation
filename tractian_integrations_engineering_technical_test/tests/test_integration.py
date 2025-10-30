@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from config import config
 from main import main, inbound_flow, outbound_flow
-from translator import data_translator, client_to_tracos, tracos_to_client
+from translator import data_translator
 from client_adapter import client_adapter
 from tracos_adapter import tracos_adapter
 
@@ -167,10 +167,10 @@ def test_complete_pipeline_end_to_end():
 
 def test_integration_pipeline_class():
     """
-    Teste específico das classes refatoradas e suas funcionalidades avançadas.
+    Teste específico das classes refatoradas e suas funcionalidades.
     
-    Valida que as novas classes (IntegrationPipeline, DataTranslator, etc.)
-    funcionam corretamente e fornecem funcionalidades extras.
+    Valida que as novas classes (DataTranslator, ClientAdapter, TracosAdapter)
+    funcionam corretamente.
     """
     async def _run_test():
         # Limpar ambiente
