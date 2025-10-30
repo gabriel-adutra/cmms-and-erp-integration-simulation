@@ -13,14 +13,14 @@ from translator import data_translator
 async def inbound_flow():
     """ Fluxo inbound: Cliente → TracOS. Lê arquivos JSON do cliente, converte para formato TracOS e salva no MongoDB."""
 
-    logger.info("Iniciando fluxo inbound (Cliente → TracOS)")
+    logger.info("----------------- Iniciando fluxo inbound (Cliente → TracOS) -----------------")
     
     files_data = client_adapter.read_inbound_files()
     if not files_data:
         logger.info("Nenhum arquivo encontrado para processamento")
         return None
     
-    logger.info(f"Processando {len(files_data)} arquivo(s)")
+    logger.debug(f"Processando {len(files_data)} arquivo(s)")
     for client_data in files_data:
         try:
             if not client_adapter.validate_client_data(client_data):
@@ -38,31 +38,26 @@ async def inbound_flow():
 async def outbound_flow():
     """ Fluxo outbound: TracOS → Cliente. Lê workorders não sincronizadas do MongoDB, converte para formato Cliente e gera arquivos JSON."""
 
-    logger.info("Iniciando fluxo outbound (TracOS → Cliente)")
+    logger.info("----------------- Iniciando fluxo outbound (TracOS → Cliente) ----------------- ")
     
-    # Lê workorders não sincronizadas
     workorders = await tracos_adapter.read_unsynced_workorders()
     if not workorders:
         logger.info("Nenhuma workorder não sincronizada encontrada")
         return
     
     logger.info(f"Processando {len(workorders)} workorder(s)")
-    
-    # Processa cada workorder
     for tracos_data in workorders:
         try:
             workorder_number = tracos_data.get('number')
             
-            # Converte TracOS → Cliente  
             client_data = data_translator.tracos_to_client(tracos_data)
             
-            # Escreve arquivo de saída
             filename = f"workorder_{workorder_number}.json"
             success = client_adapter.write_outbound_file(filename, client_data)
             
             if success:
                 # Marca como sincronizada
-                await tracos_adapter.mark_as_synced(workorder_number)
+                await tracos_adapter.mark_workorder_as_synced(workorder_number)
                 
         except Exception as e:
             logger.error(f"Erro no processamento: {e}")
@@ -71,7 +66,8 @@ async def outbound_flow():
 async def main():
     """ Função principal - executa pipeline completo de integração. """
 
-    logger.info("=== INICIANDO PIPELINE DE INTEGRAÇÃO ===")
+
+    logger.info("=============== INICIANDO PIPELINE DE INTEGRAÇÃO ===============")
     
     try:
         await inbound_flow()
@@ -80,7 +76,7 @@ async def main():
         # Cleanup
         await tracos_adapter.close_connection()
         
-        logger.info("=== PIPELINE CONCLUÍDO COM SUCESSO ===")
+        logger.info("=============== PIPELINE CONCLUÍDO COM SUCESSO ===============")
         
     except Exception as e:
         logger.error(f"Erro no pipeline: {e}")
