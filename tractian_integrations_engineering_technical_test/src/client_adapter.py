@@ -31,7 +31,7 @@ class ClientAdapter:
             logger.warning(f"Função read_inbound_files() retornando lista vazia. Nenhum arquivo JSON encontrado.")
             return files_data
         
-        logger.info(f"Processando {len(json_files)} arquivo(s) JSON.")
+        logger.debug(f"Processando {len(json_files)} arquivo(s) JSON.")
         for json_file in json_files:
             file_data = self._read_single_file(json_file)
             if file_data is not None:
@@ -87,7 +87,7 @@ class ClientAdapter:
     
 
     def validate_client_data(self, data: Dict) -> bool:
-        logger.debug(f"Entrando na função validate_client_data() com parâmetros: {data} para validação de campos obrigatórios.")
+        logger.info(f"Entrando na função validate_client_data() com parâmetros: {data} para validação de campos obrigatórios.")
         
         missing_fields = []
         required_fields = ["orderNo", "summary", "creationDate"]
@@ -99,10 +99,10 @@ class ClientAdapter:
             logger.warning(f"Função validate_client_data() retornando False - campos ausentes: {', '.join(missing_fields)}")
             return False
         
-        logger.debug(f"Função validate_client_data() retornando True para orderNo={data.get('orderNo')}")
+        logger.info(f"Função validate_client_data() retornando True para orderNo={data.get('orderNo')}")
         return True
 
 
-# Instância global para manter compatibilidade com o código existente
+
 client_adapter = ClientAdapter()
 
