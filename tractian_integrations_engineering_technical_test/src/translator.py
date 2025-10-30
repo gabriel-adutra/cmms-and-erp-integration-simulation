@@ -216,21 +216,8 @@ class DataTranslator:
         
         logger.info(f"Convertido TracOS → Cliente: order {tracos_data['number']} com status '{status}'")
         return client_data
-    
-    def get_status_mapping_info(self) -> Dict:
-        """
-        Retorna informações sobre o mapeamento de status para debugging.
-        
-        Returns:
-            Dicionário com informações de mapeamento
-        """
-        return {
-            "valid_tracos_status": list(self.VALID_TRACOS_STATUS),
-            "priority_mapping": self.STATUS_PRIORITY_MAP,
-            "description": "Ordem de prioridade: Done > Canceled > OnHold > Active > Pending (padrão)"
-        }
 
 
-# Instância global para manter compatibilidade com o código existente
+
 data_translator = DataTranslator()
 
