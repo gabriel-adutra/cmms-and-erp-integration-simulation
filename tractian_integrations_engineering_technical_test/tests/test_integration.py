@@ -1,6 +1,9 @@
 """
 Testes de integração end-to-end do sistema TracOS ↔ Cliente.
-Valida o pipeline completo: inbound → TracOS → outbound com integridade de dados.
+
+Este módulo valida o pipeline completo de integração bidirecional,
+testando desde a leitura de arquivos até a sincronização com MongoDB,
+garantindo integridade de dados e funcionamento das classes refatoradas.
 """
 
 import os
@@ -9,111 +12,251 @@ import subprocess
 import asyncio
 import sys
 from pathlib import Path
+from typing import Dict, List
 import pytest
 from motor.motor_asyncio import AsyncIOMotorClient
 
 # Adicionar src ao path para imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from config import Config
-from main import main
-from translator import client_to_tracos, tracos_to_client
+from src.config import config
+from src.main import main, integration_pipeline, IntegrationPipeline
+from src.translator import data_translator, client_to_tracos, tracos_to_client
+from src.client_adapter import client_adapter
+from src.tracos_adapter import tracos_adapter
 
 
-async def cleanup_environment():
-    """Limpa MongoDB e arquivos para ambiente limpo."""
-    config = Config()
-    
-    # Limpar MongoDB
-    try:
-        client = AsyncIOMotorClient(config.MONGO_URI)
-        db = client[config.MONGO_DATABASE]
-        await db[config.MONGO_COLLECTION].delete_many({})
-        client.close()
-    except Exception:
-        pass  # MongoDB pode não estar rodando ainda
-    
-    # Limpar arquivos inbound e outbound
-    for directory in [config.DATA_INBOUND_DIR, config.DATA_OUTBOUND_DIR]:
-        if os.path.exists(directory):
-            for file in Path(directory).glob("*.json"):
-                if file.name != ".gitignore":
-                    file.unlink()
-
-
-def test_complete_pipeline_end_to_end():
+class IntegrationTestHelper:
     """
-    Teste principal: pipeline completo do zero à validação final.
-    Simula exatamente o que um avaliador faria.
+    Helper class para testes de integração com métodos utilitários.
+    
+    Centraliza operações comuns de setup, cleanup e validação
+    para manter os testes organizados e reutilizáveis.
     """
-    async def _run_test():
-        config = Config()
+    
+    @staticmethod
+    async def cleanup_environment():
+        """
+        Limpa MongoDB e arquivos para garantir ambiente limpo.
         
-        # Setup: limpar ambiente
-        await cleanup_environment()
+        Remove todos os registros do MongoDB e arquivos JSON temporários,
+        exceto .gitignore, para garantir que cada teste comece com estado limpo.
+        """
+        # Limpar MongoDB usando o adapter refatorado
+        try:
+            client = await tracos_adapter.get_client()
+            db = client[config.MONGO_DATABASE]
+            await db[config.MONGO_COLLECTION].delete_many({})
+            await tracos_adapter.close_connection()
+        except Exception:
+            pass  # MongoDB pode não estar rodando ainda
         
-        # 1. Executar setup.py para criar dados amostra
-        result = subprocess.run(
+        # Limpar arquivos inbound e outbound
+        for directory in [config.DATA_INBOUND_DIR, config.DATA_OUTBOUND_DIR]:
+            if os.path.exists(directory):
+                for file in Path(directory).glob("*.json"):
+                    if file.name != ".gitignore":
+                        file.unlink()
+    
+    @staticmethod
+    def run_setup_script() -> subprocess.CompletedProcess:
+        """
+        Executa o script setup.py para gerar dados de teste.
+        
+        Returns:
+            Resultado da execução do subprocess
+        """
+        return subprocess.run(
             ["python", "setup.py"], 
             cwd=Path(__file__).parent.parent,
             capture_output=True, 
             text=True
         )
-        assert result.returncode == 0, f"Setup falhou: {result.stderr}"
+    
+    @staticmethod
+    async def validate_mongodb_records(expected_count: int = 10) -> int:
+        """
+        Valida número de registros no MongoDB.
         
-        # 2. Verificar que arquivos inbound foram criados
-        inbound_files = list(Path(config.DATA_INBOUND_DIR).glob("*.json"))
-        inbound_files = [f for f in inbound_files if f.name != ".gitignore"]
-        assert len(inbound_files) == 10, f"Esperado 10 arquivos inbound, encontrado {len(inbound_files)}"
-        
-        # 3. Verificar que MongoDB tem registros iniciais
-        client = AsyncIOMotorClient(config.MONGO_URI)
+        Args:
+            expected_count: Número esperado de registros
+            
+        Returns:
+            Número real de registros encontrados
+        """
+        client = await tracos_adapter.get_client()
         db = client[config.MONGO_DATABASE]
         collection = db[config.MONGO_COLLECTION]
         
-        mongo_count = await collection.count_documents({})
-        assert mongo_count == 10, f"Esperado 10 registros no MongoDB, encontrado {mongo_count}"
-        client.close()
+        count = await collection.count_documents({})
+        await tracos_adapter.close_connection()
         
-        # 4. Executar pipeline principal
+        return count
+    
+    @staticmethod
+    def validate_json_files(directory: Path, pattern: str, expected_count: int = 10) -> List[Path]:
+        """
+        Valida arquivos JSON em um diretório.
+        
+        Args:
+            directory: Diretório para verificar
+            pattern: Padrão de arquivos (ex: "*.json", "workorder_*.json")
+            expected_count: Número esperado de arquivos
+            
+        Returns:
+            Lista de arquivos encontrados
+        """
+        files = list(directory.glob(pattern))
+        # Filtrar .gitignore se presente
+        files = [f for f in files if f.name != ".gitignore"]
+        
+        assert len(files) == expected_count, \
+            f"Esperado {expected_count} arquivos {pattern}, encontrado {len(files)}"
+        
+        return files
+
+
+# Instância do helper para uso nos testes
+test_helper = IntegrationTestHelper()
+
+
+def test_complete_pipeline_end_to_end():
+    """
+    Teste principal: pipeline completo do zero à validação final.
+    
+    Este teste simula exatamente o que um avaliador faria:
+    1. Limpa ambiente para estado consistente
+    2. Executa setup para gerar dados de teste
+    3. Valida pipeline completo com classes refatoradas
+    4. Verifica integridade de dados e sincronização
+    """
+    async def _run_test():
+        # Setup: limpar ambiente usando helper
+        await test_helper.cleanup_environment()
+        
+        # 1. Executar setup.py para criar dados amostra
+        result = test_helper.run_setup_script()
+        assert result.returncode == 0, f"Setup falhou: {result.stderr}"
+        
+        # 2. Verificar que arquivos inbound foram criados
+        inbound_files = test_helper.validate_json_files(
+            config.DATA_INBOUND_DIR, "*.json", 10
+        )
+        
+        # 3. Verificar que MongoDB tem registros iniciais
+        mongo_count = await test_helper.validate_mongodb_records(10)
+        assert mongo_count == 10, f"Esperado 10 registros no MongoDB, encontrado {mongo_count}"
+        
+        # 4. Executar pipeline principal (usando função original para compatibilidade)
         await main()
         
         # 5. Validar arquivos outbound gerados
-        outbound_files = list(Path(config.DATA_OUTBOUND_DIR).glob("workorder_*.json"))
-        assert len(outbound_files) == 10, f"Esperado 10 arquivos outbound, encontrado {len(outbound_files)}"
+        outbound_files = test_helper.validate_json_files(
+            config.DATA_OUTBOUND_DIR, "workorder_*.json", 10
+        )
         
         # 6. Validar integridade de dados (idempotência)
         await validate_data_integrity()
         
         # 7. Validar registros marcados como sincronizados
         await validate_sync_status()
+        
+        # 8. Teste adicional: validar métricas do pipeline refatorado
+        await validate_pipeline_metrics()
     
     asyncio.run(_run_test())
 
 
-async def validate_data_integrity():
-    """Valida que dados inbound == outbound (idempotência)."""
-    config = Config()
+def test_integration_pipeline_class():
+    """
+    Teste específico das classes refatoradas e suas funcionalidades avançadas.
     
-    # Campos que devem ser idênticos
+    Valida que as novas classes (IntegrationPipeline, DataTranslator, etc.)
+    funcionam corretamente e fornecem funcionalidades extras.
+    """
+    async def _run_test():
+        # Limpar ambiente
+        await test_helper.cleanup_environment()
+        
+        # Setup dados
+        result = test_helper.run_setup_script()
+        assert result.returncode == 0, f"Setup falhou: {result.stderr}"
+        
+        # Criar pipeline específico para teste
+        test_pipeline = IntegrationPipeline()
+        
+        # Testar fluxo inbound isoladamente
+        inbound_stats = await test_pipeline.run_inbound_flow()
+        assert inbound_stats['files_read'] == 10
+        assert inbound_stats['success_rate'] == 1.0
+        
+        # Testar fluxo outbound isoladamente  
+        outbound_stats = await test_pipeline.run_outbound_flow()
+        assert outbound_stats['workorders_read'] == 10
+        assert outbound_stats['success_rate'] == 1.0
+        
+        # Validar métricas coletadas
+        assert test_pipeline.metrics.inbound_files_read == 10
+        assert test_pipeline.metrics.outbound_workorders_read == 10
+        
+        # Testar cleanup
+        await test_pipeline._cleanup_resources()
+        
+    asyncio.run(_run_test())
+
+
+async def validate_pipeline_metrics():
+    """
+    Valida que o pipeline refatorado coleta métricas corretamente.
+    
+    Verifica se as métricas da classe IntegrationPipeline estão sendo
+    coletadas e calculadas adequadamente durante a execução.
+    """
+    # Acessar métricas do pipeline global após execução
+    metrics = integration_pipeline.metrics
+    
+    # Validar que métricas foram coletadas
+    assert metrics.inbound_files_read > 0, "Métricas inbound não foram coletadas"
+    assert metrics.outbound_workorders_read > 0, "Métricas outbound não foram coletadas"
+    
+    # Validar cálculos de taxa de sucesso
+    inbound_rate = metrics.get_inbound_success_rate()
+    outbound_rate = metrics.get_outbound_success_rate()
+    
+    assert 0.0 <= inbound_rate <= 1.0, f"Taxa inbound inválida: {inbound_rate}"
+    assert 0.0 <= outbound_rate <= 1.0, f"Taxa outbound inválida: {outbound_rate}"
+    
+    # Validar tempo de execução
+    execution_time = metrics.get_execution_time()
+    assert execution_time >= 0, f"Tempo de execução inválido: {execution_time}"
+
+
+async def validate_data_integrity():
+    """
+    Valida que dados inbound == outbound (idempotência).
+    
+    Verifica se o sistema mantém integridade referencial entre os dados
+    de entrada e saída, respeitando as regras de transformação de status.
+    """
+    # Campos que devem ser idênticos entre entrada e saída
     business_fields = [
         'orderNo', 'summary', 'isDone', 'isCanceled', 
         'isOnHold', 'isPending', 'isDeleted', 'deletedDate'
     ]
     
     for i in range(1, 11):
-        # Ler arquivo inbound
-        inbound_path = Path(config.DATA_INBOUND_DIR) / f"{i}.json"
+        # Ler arquivo inbound usando paths do config global
+        inbound_path = config.DATA_INBOUND_DIR / f"{i}.json"
         assert inbound_path.exists(), f"Arquivo inbound {i}.json não encontrado"
         
-        with open(inbound_path) as f:
+        with open(inbound_path, 'r', encoding='utf-8') as f:
             inbound_data = json.load(f)
         
         # Ler arquivo outbound correspondente
-        outbound_path = Path(config.DATA_OUTBOUND_DIR) / f"workorder_{i}.json"
+        outbound_path = config.DATA_OUTBOUND_DIR / f"workorder_{i}.json"
         assert outbound_path.exists(), f"Arquivo outbound workorder_{i}.json não encontrado"
         
-        with open(outbound_path) as f:
+        with open(outbound_path, 'r', encoding='utf-8') as f:
             outbound_data = json.load(f)
         
         # Validar campos business idênticos
@@ -122,7 +265,7 @@ async def validate_data_integrity():
             outbound_value = outbound_data.get(field)
             
             # Caso especial: se todos os status são false no input, 
-            # o sistema assume "pending" como padrão, então isPending vira true no output
+            # o DataTranslator assume "pending" como padrão, então isPending vira true no output
             if field == 'isPending' and not any([
                 inbound_data.get('isDone'), inbound_data.get('isCanceled'),
                 inbound_data.get('isOnHold'), inbound_data.get('isPending'),
@@ -135,19 +278,23 @@ async def validate_data_integrity():
                 assert inbound_value == outbound_value, \
                     f"Campo {field} diferente no arquivo {i}: {inbound_value} != {outbound_value}"
         
-        # Validar campo isActive presente no output
+        # Validar campo isActive presente no output (gerado pelo DataTranslator)
         assert 'isActive' in outbound_data, f"Campo isActive ausente no workorder_{i}.json"
         
-        # Validar formato JSON válido
+        # Validar formato JSON válido (garantido pelo ClientAdapter)
         assert isinstance(outbound_data['orderNo'], int), f"orderNo deve ser int no workorder_{i}.json"
         assert isinstance(outbound_data['summary'], str), f"summary deve ser str no workorder_{i}.json"
 
 
 async def validate_sync_status():
-    """Valida que registros foram marcados como isSynced=true."""
-    config = Config()
+    """
+    Valida que registros foram marcados como isSynced=true.
     
-    client = AsyncIOMotorClient(config.MONGO_URI)
+    Usa o TracosAdapter refatorado para verificar se todas as workorders
+    foram adequadamente marcadas como sincronizadas após o processamento.
+    """
+    # Usar TracosAdapter para validação (em vez de conexão direta)
+    client = await tracos_adapter.get_client()
     db = client[config.MONGO_DATABASE]
     collection = db[config.MONGO_COLLECTION]
     
@@ -158,23 +305,28 @@ async def validate_sync_status():
     assert synced_count == total_count == 10, \
         f"Esperado 10 registros sincronizados, encontrado {synced_count}/{total_count}"
     
-    client.close()
+    # Fechar conexão adequadamente
+    await tracos_adapter.close_connection()
 
 
 def test_field_mapping_correctness():
-    """Testa mapeamento específico de campos entre Client ↔ TracOS."""
+    """
+    Testa mapeamento específico de campos entre Client ↔ TracOS.
+    
+    Valida que o DataTranslator está fazendo as conversões corretas
+    de campos e que os dados no MongoDB estão no formato TracOS esperado.
+    """
     async def _run_test():
-        config = Config()
-        
-        # Limpar ambiente
-        await cleanup_environment()
+        # Limpar ambiente usando helper
+        await test_helper.cleanup_environment()
         
         # Executar setup e pipeline
-        subprocess.run(["python", "setup.py"], cwd=Path(__file__).parent.parent, check=True)
+        result = test_helper.run_setup_script()
+        assert result.returncode == 0, f"Setup falhou: {result.stderr}"
         await main()
         
-        # Verificar mapeamento no MongoDB
-        client = AsyncIOMotorClient(config.MONGO_URI)
+        # Verificar mapeamento no MongoDB usando TracosAdapter
+        client = await tracos_adapter.get_client()
         db = client[config.MONGO_DATABASE]
         collection = db[config.MONGO_COLLECTION]
         
@@ -182,29 +334,65 @@ def test_field_mapping_correctness():
         mongo_record = await collection.find_one({"number": 1})
         assert mongo_record is not None, "Registro number=1 não encontrado no MongoDB"
         
-        # Validar campos mapeados corretamente
+        # Validar campos mapeados corretamente pelo DataTranslator
         assert "title" in mongo_record, "Campo 'title' ausente no MongoDB"
         assert "description" in mongo_record, "Campo 'description' ausente no MongoDB"
         assert "status" in mongo_record, "Campo 'status' ausente no MongoDB"
         assert "deleted" in mongo_record, "Campo 'deleted' ausente no MongoDB"
         
-        # Validar status é enum válido
-        valid_statuses = ["pending", "in_progress", "completed", "on_hold", "cancelled"]
+        # Validar status é enum válido (conforme DataTranslator.VALID_TRACOS_STATUS)
+        valid_statuses = data_translator.VALID_TRACOS_STATUS
         assert mongo_record["status"] in valid_statuses, \
             f"Status '{mongo_record['status']}' inválido. Deve ser um de: {valid_statuses}"
         
-        # Validar description é title + " description"
+        # Validar description é title + " description" (regra do DataTranslator)
         expected_description = f"{mongo_record['title']} description"
         assert mongo_record["description"] == expected_description, \
             f"Description incorreta: esperado '{expected_description}', encontrado '{mongo_record['description']}'"
         
-        client.close()
+        # Fechar conexão adequadamente
+        await tracos_adapter.close_connection()
+        
+        # Teste adicional: validar mapeamento de status prioritário
+        await test_status_priority_mapping()
     
     asyncio.run(_run_test())
 
 
+async def test_status_priority_mapping():
+    """
+    Testa especificamente a lógica de prioridade de status do DataTranslator.
+    
+    Valida que a ordem de precedência Done > Canceled > OnHold > Active > Pending
+    está sendo respeitada corretamente.
+    """
+    # Teste com múltiplos status True (deve prevalecer isDone)
+    complex_client_data = {
+        "orderNo": 9999,
+        "summary": "Test priority",
+        "creationDate": "2025-10-29T10:00:00Z",
+        "isDone": True,       # Maior prioridade
+        "isCanceled": True,   # Deve ser ignorado
+        "isActive": True      # Deve ser ignorado
+    }
+    
+    tracos_result = data_translator.client_to_tracos(complex_client_data)
+    assert tracos_result["status"] == "completed", \
+        f"Prioridade incorreta: esperado 'completed', obtido '{tracos_result['status']}'"
+    
+    # Teste conversão reversa
+    client_result = data_translator.tracos_to_client(tracos_result)
+    assert client_result["isDone"] == True, "isDone deve ser True na conversão reversa"
+    assert client_result["isCanceled"] == False, "isCanceled deve ser False na conversão reversa"
+
+
 def test_schema_compliance():
-    """Testa que translator não gera status inválidos (assert funciona)."""
+    """
+    Testa que DataTranslator não gera status inválidos e garante compliance.
+    
+    Valida que a validação rigorosa do DataTranslator funciona corretamente
+    e que os status gerados estão sempre dentro do conjunto válido.
+    """
     # Teste 1: Status válidos não devem dar erro
     valid_client_data = {
         "orderNo": 999,
@@ -218,22 +406,82 @@ def test_schema_compliance():
         "isDeleted": False
     }
     
-    # Não deve dar erro
-    tracos_data = client_to_tracos(valid_client_data)
+    # Usar DataTranslator refatorado - não deve dar erro
+    tracos_data = data_translator.client_to_tracos(valid_client_data)
     assert tracos_data["status"] == "completed"
     
-    # Teste 2: Mapeamento reverso deve funcionar
-    client_data_back = tracos_to_client(tracos_data)
+    # Validar que status está no conjunto válido
+    assert tracos_data["status"] in data_translator.VALID_TRACOS_STATUS
+    
+    # Teste 2: Mapeamento reverso deve funcionar perfeitamente
+    client_data_back = data_translator.tracos_to_client(tracos_data)
     assert client_data_back["isDone"] == True
     assert client_data_back["isActive"] == False
     
-    # Teste 3: Campo deleted separado do status
+    # Teste 3: Campo deleted separado do status (regra important do negócio)
     deleted_client_data = valid_client_data.copy()
     deleted_client_data["isDeleted"] = True
     deleted_client_data["isDone"] = False
     deleted_client_data["isPending"] = True
     
-    tracos_deleted = client_to_tracos(deleted_client_data)
+    tracos_deleted = data_translator.client_to_tracos(deleted_client_data)
     # Status deve ser "pending" (não "deleted"!) e deleted=True
     assert tracos_deleted["status"] == "pending"
     assert tracos_deleted["deleted"] == True
+    
+    # Teste 4: Validação de campos obrigatórios
+    try:
+        invalid_data = {"summary": "Missing orderNo"}
+        data_translator.client_to_tracos(invalid_data)
+        assert False, "Deveria ter falhado com campos obrigatórios ausentes"
+    except KeyError:
+        pass  # Comportamento esperado
+    
+    # Teste 5: Validação de status TracOS inválido
+    try:
+        from datetime import datetime
+        invalid_tracos = {
+            "number": 123,
+            "title": "Test",
+            "status": "status_inexistente",
+            "createdAt": datetime.now(),
+            "updatedAt": datetime.now()
+        }
+        data_translator.tracos_to_client(invalid_tracos)
+        assert False, "Deveria ter falhado com status TracOS inválido"
+    except ValueError:
+        pass  # Comportamento esperado
+
+
+def test_adapter_classes_functionality():
+    """
+    Testa funcionalidades específicas das classes refatoradas.
+    
+    Valida que ClientAdapter e TracosAdapter estão funcionando
+    corretamente com suas novas funcionalidades.
+    """
+    # Teste ClientAdapter
+    assert hasattr(client_adapter, 'validate_client_data')
+    assert hasattr(client_adapter, 'read_inbound_files')
+    assert hasattr(client_adapter, 'write_outbound_file')
+    
+    # Teste TracosAdapter  
+    assert hasattr(tracos_adapter, 'read_unsynced_workorders')
+    assert hasattr(tracos_adapter, 'upsert_workorder')
+    assert hasattr(tracos_adapter, 'mark_as_synced')
+    assert hasattr(tracos_adapter, 'close_connection')
+    
+    # Teste DataTranslator
+    assert hasattr(data_translator, 'VALID_TRACOS_STATUS')
+    assert hasattr(data_translator, 'STATUS_PRIORITY_MAP')
+    assert hasattr(data_translator, 'get_status_mapping_info')
+    
+    # Teste IntegrationPipeline
+    assert hasattr(integration_pipeline, 'metrics')
+    assert hasattr(integration_pipeline, 'execute_full_pipeline')
+    
+    # Validar informações de debug do DataTranslator
+    mapping_info = data_translator.get_status_mapping_info()
+    assert 'valid_tracos_status' in mapping_info
+    assert 'priority_mapping' in mapping_info
+    assert len(mapping_info['valid_tracos_status']) == 5
