@@ -1,6 +1,5 @@
 """
 Testes de integração end-to-end do sistema TracOS ↔ Cliente.
-
 Este módulo valida o pipeline completo de integração bidirecional,
 testando desde a leitura de arquivos até a sincronização com MongoDB,
 garantindo integridade de dados e funcionamento das classes refatoradas.
@@ -17,9 +16,7 @@ from datetime import datetime
 import pytest
 from motor.motor_asyncio import AsyncIOMotorClient
 
-# Adicionar src ao path para imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
 from config import config
 from main import main, inbound_flow, outbound_flow
 from translator import data_translator
@@ -30,7 +27,6 @@ from tracos_adapter import tracos_adapter
 class IntegrationTestHelper:
     """
     Helper class para testes de integração com métodos utilitários.
-    
     Centraliza operações comuns de setup, cleanup e validação
     para manter os testes organizados e reutilizáveis.
     """
@@ -39,7 +35,6 @@ class IntegrationTestHelper:
     async def cleanup_environment():
         """
         Limpa MongoDB e arquivos para garantir ambiente limpo.
-        
         Remove todos os registros do MongoDB e arquivos JSON temporários,
         exceto .gitignore, para garantir que cada teste comece com estado limpo.
         """
@@ -63,7 +58,6 @@ class IntegrationTestHelper:
     def run_setup_script() -> subprocess.CompletedProcess:
         """
         Executa o script setup.py para gerar dados de teste.
-        
         Returns:
             Resultado da execução do subprocess
         """
@@ -78,10 +72,8 @@ class IntegrationTestHelper:
     async def validate_mongodb_records(expected_count: int = 10) -> int:
         """
         Valida número de registros no MongoDB.
-        
         Args:
             expected_count: Número esperado de registros
-            
         Returns:
             Número real de registros encontrados
         """
@@ -194,7 +186,6 @@ def test_integration_pipeline_class():
 async def validate_data_integrity():
     """
     Valida que dados inbound == outbound (idempotência).
-    
     Verifica se o sistema mantém integridade referencial entre os dados
     de entrada e saída, respeitando as regras de transformação de status.
     """
@@ -260,7 +251,6 @@ async def validate_data_integrity():
 async def validate_sync_status():
     """
     Valida que registros foram marcados como isSynced=true.
-    
     Usa o TracosAdapter refatorado para verificar se todas as workorders
     foram adequadamente marcadas como sincronizadas após o processamento.
     """
@@ -283,7 +273,6 @@ async def validate_sync_status():
 def test_field_mapping_correctness():
     """
     Testa mapeamento específico de campos entre Client ↔ TracOS.
-    
     Valida que o DataTranslator está fazendo as conversões corretas
     de campos e que os dados no MongoDB estão no formato TracOS esperado.
     """
