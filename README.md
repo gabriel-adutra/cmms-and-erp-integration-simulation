@@ -2,76 +2,74 @@
 
 ## Sobre o Projeto
 
-Este projeto implementa um sistema de integração bidirecional assíncrona entre o CMMS TracOS da Tractian e sistemas ERP de clientes, realizando sincronização automática de ordens de trabalho com tradução de dados, validação e recuperação de falhas.
+Este projeto implementa um serviço Python assíncrono que simula uma integração bidirecional entre o CMMS TracOS da Tractian e o sistema ERP de um cliente. O sistema sincroniza ordens de trabalho entre os dois sistemas, realizando fluxos inbound (Cliente → TracOS) e outbound (TracOS → Cliente) com tradução de dados e validação.
 
-## Arquitetura Escolhida
+## Arquitetura
 
-### Padrão Modular com Separation of Concerns
-- **`client_adapter.py`** - Operações I/O com sistema cliente (arquivos JSON)
-- **`tracos_adapter.py`** - Operações MongoDB com sistema TracOS
-- **`translator.py`** - Conversão bidirecional de formatos de dados
+O sistema foi projetado com **separação clara de responsabilidades** para facilitar a adição de novas integrações sem modificar módulos existentes:
+
+### Módulos Principais
+- **`client_adapter.py`** - Operações de leitura/escrita com sistema cliente (arquivos JSON)
+- **`tracos_adapter.py`** - Operações de leitura/escrita com sistema TracOS (MongoDB)
+- **`translator.py`** - Tradução bidirecional de formatos de dados entre sistemas
 - **`config.py`** - Configuração centralizada via variáveis de ambiente
-- **`main.py`** - Orquestrador do pipeline principal
+- **`main.py`** - Orquestrador principal do pipeline de integração
 
-### Características Técnicas
-- **Assíncrono**: Operações MongoDB não-bloqueantes com motor driver
-- **Resiliente**: Retry logic para falhas temporárias + I/O error handling específico
-- **Idempotente**: Operações seguras para retry (upsert com chave única)
-- **Observável**: Logging estruturado com loguru para monitoramento
+### Características do Sistema
+- **Assíncrono**: Operações MongoDB não-bloqueantes para melhor performance
+- **Resiliente**: Tratamento robusto de erros de I/O e falhas temporárias de rede
+- **Idempotente**: Operações seguras para retry usando upsert com chaves únicas
+- **Extensível**: Arquitetura modular permite adicionar novos sistemas facilmente
+
+### Destaques Técnicos Implementados
+- **Padrão Singleton**: Configuração centralizada com carregamento único
+- **Retry com Backoff Exponencial**: Recuperação automática de falhas temporárias (1s → 2s → 4s)
+- **Logging Estruturado**: Logs claros com métricas automáticas de performance
+- **Gestão de Recursos**: Reutilização inteligente de conexões MongoDB e cleanup automático
+- **Validação Rigorosa**: Campos obrigatórios e tipos validados com mensagens de erro específicas
+- **Isolamento de Falhas**: Um arquivo com problema não interrompe o pipeline inteiro
 
 ## Como o Sistema Funciona
 
 ### Fluxo Inbound (Cliente → TracOS)
-```
-Arquivos JSON → Validação → Tradução → MongoDB
-data/inbound/   client_adapter  translator   tracos_adapter
-```
+1. **Leitura**: Processa arquivos JSON da pasta `data/inbound/` (simulando respostas de API do cliente)
+2. **Validação**: Verifica campos obrigatórios (`orderNo`, `summary`, `creationDate`)
+3. **Tradução**: Converte formato do cliente para formato TracOS (ex: status booleanos → enums)
+4. **Persistência**: Salva/atualiza registros no MongoDB com `isSynced=false`
 
 ### Fluxo Outbound (TracOS → Cliente)
-```
-MongoDB → Tradução → Arquivos JSON → Marcação Sincronizada
-tracos_adapter  translator  client_adapter  tracos_adapter
-```
+1. **Consulta**: Busca workorders no MongoDB com `isSynced=false`
+2. **Tradução**: Converte formato TracOS para formato do cliente
+3. **Geração**: Cria arquivos JSON na pasta `data/outbound/` (prontos para "enviar" ao cliente)
+4. **Marcação**: Atualiza registros no MongoDB com `isSynced=true` e timestamp `syncedAt`
 
-### Pipeline Completo
-1. **Leitura**: Processa arquivos `data/inbound/*.json`
-2. **Validação**: Verifica campos obrigatórios (`orderNo`, `summary`, `creationDate`)
-3. **Tradução**: Converte formato Cliente → TracOS (status boolean → enum)
-4. **Persistência**: Salva no MongoDB com `isSynced=false`
-5. **Sincronização**: Lê registros não sincronizados do MongoDB
-6. **Conversão**: Traduz TracOS → Cliente (enum → boolean)
-7. **Geração**: Cria arquivos `data/outbound/workorder_*.json`
-8. **Controle**: Marca registros como `isSynced=true`
+### Normalização de Dados
+- **Datas**: Normalizadas para UTC ISO 8601
+- **Status**: Mapeamento entre enums (cliente usa booleanos, TracOS usa strings)
+- **Campos**: Tradução entre diferentes nomenclaturas e estruturas
 
-### Regra de Negócio: Status Padrão
-**Importante**: Workorders do cliente sem status ativo (todos os campos `false`) recebem automaticamente `status="pending"` no TracOS. Isso garante que toda workorder tenha um estado válido no sistema. 
+### Regra de Negócio Importante
+**Status Padrão para Workorders**: Quando uma workorder do cliente não possui nenhum status ativo (todos os campos booleanos são `false`), o sistema automaticamente aplica `status="pending"` no TracOS. Isso garante que toda workorder tenha um estado válido no sistema.
 
-**Exemplo**: `isPending: false` → Sistema aplica `"pending"` → Retorna `isPending: true`
+**Exemplo**: Cliente envia `isPending: false, isDone: false, isCanceled: false, isOnHold: false` → Sistema aplica `"pending"` → Retorna `isPending: true` na sincronização de volta.
 
-## Estrutura de Pastas
+## Estrutura do Projeto
 
 ```
-integrations-engineering-code-assessment/
+tractian_integrations_engineering_technical_test/
 ├── docker-compose.yml              # Container MongoDB
 ├── pyproject.toml                  # Dependências Poetry
-├── setup.py                        # Inicialização dados amostra
-├── project_requirements.md         # Requisitos originais do projeto
-├── .env                           # Variáveis ambiente
+├── setup.py                        # Script de inicialização com dados de exemplo
+├── .env                           # Variáveis de ambiente
 ├── data/
-│   ├── inbound/                   # JSONs entrada (Cliente → TracOS)
-│   │   ├── 1.json                 # Workorder cliente #1
-│   │   ├── 2.json                 # Workorder cliente #2
-│   │   └── ...                    # Arquivos gerados pelo setup.py
-│   └── outbound/                  # JSONs saída (TracOS → Cliente)
-│       ├── workorder_1.json       # Workorder convertida #1
-│       ├── workorder_2.json       # Workorder convertida #2
-│       └── ...                    # Arquivos gerados pelo pipeline
+│   ├── inbound/                   # Arquivos JSON de entrada (Cliente → TracOS)
+│   └── outbound/                  # Arquivos JSON de saída (TracOS → Cliente)
 ├── src/
-│   ├── main.py                    # Pipeline principal (ponto entrada)
-│   ├── client_adapter.py          # Adaptador sistema cliente
-│   ├── tracos_adapter.py          # Adaptador sistema TracOS
-│   ├── translator.py              # Tradutor formatos dados
-│   └── config.py                  # Configurações centralizadas
+│   ├── main.py                    # Script principal - executa pipeline completo
+│   ├── client_adapter.py          # Módulo para operações com sistema cliente
+│   ├── tracos_adapter.py          # Módulo para operações com sistema TracOS
+│   ├── translator.py              # Módulo para tradução entre formatos
+│   └── config.py                  # Configuração centralizada
 └── tests/
     └── test_integration.py        # Testes end-to-end
 ```
@@ -123,84 +121,71 @@ poetry run python src/main.py
 ls data/outbound/
 ```
 
-## Testes End-to-End
+## Executando o Sistema
 
-### Executar Testes
+### Rodar Pipeline Completo
 ```bash
-# Execução silenciosa (apenas resultados finais)
+# Executa fluxo inbound + outbound completo
+poetry run python src/main.py
+```
+
+## Testes
+
+### Executar Testes End-to-End
+```bash
+# Execução simples
 poetry run pytest
 
-# Execução com nomes dos testes
-poetry run pytest -v
-
-# Execução completa com logs do sistema (RECOMENDADO para avaliação)
+# Execução com logs detalhados (recomendado)
 poetry run pytest -v -s
+```
 
+### O Que os Testes Validam
+- ✅ Pipeline completo: fluxo inbound → MongoDB → outbound
+- ✅ Tradução correta de dados entre formatos Cliente ↔ TracOS  
+- ✅ Integridade: dados de entrada correspondem aos dados de saída
+- ✅ Tratamento de erros e logging apropriado
 
-### Cobertura de Testes
-Os testes validam:
-- ✅ **Pipeline completo**: Fluxo inbound → MongoDB → outbound  
-- ✅ **Mapeamento de campos**: Conversão correta Cliente ↔ TracOS
-- ✅ **Compliance de schema**: Validação de enums e formatos TracOS
-- ✅ **Integridade de dados**: Dados de entrada = dados de saída
-- ✅ **Resiliência**: Ambiente limpo entre execuções
+## Troubleshooting
 
-### Troubleshooting de Testes
+### Problemas Comuns
 
-**Se os testes falharem**:
+**MongoDB não conecta**:
 ```bash
-# 1. Verificar se MongoDB está rodando
+# Verificar se container está rodando
 docker ps | grep mongo
 
-# 2. Limpar dados e reinicializar
+# Reiniciar se necessário
+docker compose down && docker compose up -d
+```
+
+**Testes falhando**:
+```bash
+# Limpar ambiente e recomeçar
 docker compose down -v
 docker compose up -d
 poetry run python setup.py
 poetry run pytest -v -s
-
-# 3. Verificar logs detalhados do sistema
-poetry run python src/main.py
 ```
 
-**Interpretação de Falhas Comuns**:
-- `AssertionError: Campo X diferente` → Problema no mapeamento de dados
-- `Connection refused` → MongoDB não está acessível  
-- `FileNotFoundError` → Dados de amostra não foram criados (`setup.py`)
-
-**Comandos Úteis para Troubleshooting**:
+**Dados não aparecem**:
 ```bash
-# Verificar container MongoDB
-docker ps | grep mongo
-
-# Apenas reiniciar (mantém dados)
-docker compose restart
-
-# Limpar completamente e recomeçar (remove dados)
-docker compose down -v && docker compose up -d
-
-# Verificar logs do MongoDB
-docker logs tractian-mongo
-
-# Verificar formato de arquivos JSON
-cat data/inbound/1.json | jq .
+# Verificar se dados de exemplo foram criados
+ls data/inbound/
+# Se vazio, executar: poetry run python setup.py
 ```
 
 ---
 
-## Configuração Detalhada
+## Configuração
 
 ### Variáveis de Ambiente
-O projeto inclui um arquivo `.env` pré-configurado com as variáveis necessárias:
+O arquivo `.env` contém as configurações necessárias:
 ```bash
 MONGO_URI=mongodb://localhost:27017/tractian
 DATA_INBOUND_DIR=./data/inbound  
 DATA_OUTBOUND_DIR=./data/outbound
 ```
-
-### Configuração MongoDB Padrão
-- **Database**: `tractian`
-- **Collection**: `workorders`
-- **Porta**: `27017`
 
 ## Exemplo de Dados
 
@@ -270,100 +255,4 @@ DATA_OUTBOUND_DIR=./data/outbound
 
 ---
 
-## Logs e Monitoramento
-
-### Estrutura de Logs (Loguru)
-```bash
-# Exemplo de execução bem-sucedida
-2025-10-29 17:21:43 | INFO | main:main:49 - === Iniciando Pipeline de Integração TracOS ↔ Cliente ===
-2025-10-29 17:21:43 | INFO | main:inbound_flow:13 - Iniciando fluxo inbound (Cliente → TracOS)
-2025-10-29 17:21:43 | INFO | client_adapter:read_inbound_files:24 - Arquivo lido: 1.json
-2025-10-29 17:21:43 | INFO | tracos_adapter:_upsert:88 - Workorder 1 atualizado
-2025-10-29 17:21:43 | INFO | main:inbound_flow:25 - Fluxo inbound finalizado: 10 workorders processadas
-2025-10-29 17:21:43 | INFO | main:outbound_flow:30 - Iniciando fluxo outbound (TracOS → Cliente)
-2025-10-29 17:21:43 | INFO | client_adapter:write_outbound_file:44 - Arquivo escrito: workorder_1.json
-2025-10-29 17:21:43 | INFO | tracos_adapter:_mark:114 - Workorder 1 marcada como sincronizada
-2025-10-29 17:21:43 | INFO | main:main:54 - === Pipeline de Integração Finalizado ===
-```
-
-### Visualização de Logs
-- **Durante testes**: Use `poetry run pytest -v -s` para ver logs em tempo real
-- **Durante execução**: `poetry run python src/main.py` mostra logs automaticamente
-- **Para debugging**: Logs incluem módulo, função e linha para rastreabilidade
-
-### Tratamento de Erros
-
-#### I/O Errors (Arquivos)
-```bash
-ERROR | JSON corrompido em arquivo.json: Expecting property name...
-WARNING | Arquivo não encontrado: missing.json
-ERROR | Sem permissão para ler arquivo: restricted.json
-```
-
-#### MongoDB Errors (Rede)
-```bash
-ERROR | Erro ao ler workorders após tentativas: Connection refused
-INFO | Workorder 5 atualizado (após retry automático)
-```
-
-### Recursos de Resiliência
-- **Retry MongoDB**: 3 tentativas com 1s delay para falhas temporárias
-- **I/O Error Handling**: Tratamento específico para arquivos corrompidos/inacessíveis
-- **Pipeline Resiliente**: Continua processando mesmo com arquivos problemáticos
-- **Logs Informativos**: Sem stack traces confusos, mensagens claras
-
-## Desenvolvimento
-
-### Arquitetura para Extensibilidade
-O sistema foi projetado para fácil adição de novos sistemas:
-
-```python
-# Novo adaptador para sistema XYZ
-class XYZAdapter:
-    def read_data(self): pass
-    def write_data(self): pass
-
-# Novo tradutor para formato XYZ  
-def xyz_to_tracos(xyz_data): pass
-def tracos_to_xyz(tracos_data): pass
-```
-
-### Padrões Utilizados
-- **Adapter Pattern**: Isolamento entre sistemas diferentes
-- **Retry Pattern**: Recuperação automática de falhas temporárias  
-- **Configuration Pattern**: Configuração centralizada via variáveis ambiente
-- **Pipeline Pattern**: Fluxo sequencial de processamento de dados
-
-### Decisões Arquiteturais
-
-#### Por que Async/Await?
-- **MongoDB é I/O intensivo**: Operações de rede se beneficiam de não-bloqueio
-- **Escalabilidade**: Permite processamento concorrente de workorders
-- **Motor Driver**: Driver oficial assíncrono do MongoDB para Python
-
-#### Por que Loguru em vez de logging padrão?
-- **Sintaxe simples**: `logger.info()` vs configuração complexa do logging
-- **Formatação automática**: Timestamp, cores e estrutura sem configuração
-- **Performance**: Mais rápido que logging padrão do Python
-
-#### Por que Separação de Tradutores?
-- **Single Responsibility**: Cada função faz uma conversão específica  
-- **Testabilidade**: Fácil validar mapeamentos individuais
-- **Manutenibilidade**: Mudanças de formato isoladas em funções específicas
-
----
-
-## Tecnologias Utilizadas
-
-- **Python 3.11** - Linguagem principal
-- **Poetry** - Gerenciamento de dependências
-- **Motor** - Driver assíncrono MongoDB
-- **Loguru** - Logging estruturado
-- **MongoDB** - Banco de dados TracOS
-- **Docker** - Containerização MongoDB
-- **Pytest** - Framework de testes
-- **JSON** - Formato de intercâmbio de dados
-
----
-
-*Sistema desenvolvido seguindo requisitos de integração TracOS ↔ Cliente com foco em resiliência, observabilidade e extensibilidade.*
+*Sistema de integração TracOS ↔ Cliente implementado com foco em modularidade, resiliência e facilidade de extensão para novos sistemas.*
