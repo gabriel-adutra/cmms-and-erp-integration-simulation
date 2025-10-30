@@ -16,10 +16,10 @@ from loguru import logger
 class ClientAdapter:
 
     def __init__(self):
-        logger.info("Inicializado ClientAdapter com as configurações do sistema...")
+        logger.info("Inicializado Classe ClientAdapter...")
         self.inbound_dir = config.DATA_INBOUND_DIR
         self.outbound_dir = config.DATA_OUTBOUND_DIR
-        logger.info("ClientAdapter inicializado.")
+        logger.info("Classe ClientAdapter inicializada.")
 
     
     def read_inbound_files(self) -> List[Dict]:
@@ -28,7 +28,7 @@ class ClientAdapter:
         files_data = []
         json_files = list(self.inbound_dir.glob("*.json"))
         if not json_files:
-            logger.warning(f"Função read_inbound_files() retornando lista vazia - nenhum arquivo JSON encontrado.")
+            logger.warning(f"Função read_inbound_files() retornando lista vazia. Nenhum arquivo JSON encontrado.")
             return files_data
         
         logger.info(f"Processando {len(json_files)} arquivo(s) JSON.")
