@@ -1,47 +1,34 @@
-"""
-Pipeline principal de integração TracOS ↔ Cliente.
-
-Este módulo orquestra o fluxo completo de sincronização bidirecional
-entre os sistemas Cliente e TracOS.
+""" Pipeline principal de integração TracOS ↔ Cliente. 
+Este módulo orquestra o fluxo completo de sincronização bidirecional entre os sistemas Cliente e TracOS. 
 """
 
 import asyncio
 from loguru import logger
-
 from client_adapter import client_adapter  
 from tracos_adapter import tracos_adapter
 from translator import data_translator
 
 
+
 async def inbound_flow():
-    """
-    Fluxo inbound: Cliente → TracOS
-    
-    Lê arquivos JSON do cliente, converte para formato TracOS e salva no MongoDB.
-    """
+    """ Fluxo inbound: Cliente → TracOS. Lê arquivos JSON do cliente, converte para formato TracOS e salva no MongoDB."""
+
     logger.info("Iniciando fluxo inbound (Cliente → TracOS)")
     
-    # Lê arquivos de entrada
     files_data = client_adapter.read_inbound_files()
-    
     if not files_data:
         logger.info("Nenhum arquivo encontrado para processamento")
-        return
+        return None
     
     logger.info(f"Processando {len(files_data)} arquivo(s)")
-    
-    # Processa cada arquivo
     for client_data in files_data:
         try:
-            # Valida dados do cliente
             if not client_adapter.validate_client_data(client_data):
                 logger.warning(f"Dados inválidos: {client_data.get('orderNo', 'N/A')}")
                 continue
                 
-            # Converte Cliente → TracOS
             tracos_data = data_translator.client_to_tracos(client_data)
             
-            # Salva no MongoDB
             await tracos_adapter.upsert_workorder(tracos_data)
             
         except Exception as e:
@@ -49,17 +36,12 @@ async def inbound_flow():
 
 
 async def outbound_flow():
-    """
-    Fluxo outbound: TracOS → Cliente
-    
-    Lê workorders não sincronizadas do MongoDB, converte para formato Cliente 
-    e gera arquivos JSON.
-    """
+    """ Fluxo outbound: TracOS → Cliente. Lê workorders não sincronizadas do MongoDB, converte para formato Cliente e gera arquivos JSON."""
+
     logger.info("Iniciando fluxo outbound (TracOS → Cliente)")
     
     # Lê workorders não sincronizadas
     workorders = await tracos_adapter.read_unsynced_workorders()
-    
     if not workorders:
         logger.info("Nenhuma workorder não sincronizada encontrada")
         return
@@ -87,9 +69,8 @@ async def outbound_flow():
 
 
 async def main():
-    """
-    Função principal - executa pipeline completo de integração.
-    """
+    """ Função principal - executa pipeline completo de integração. """
+
     logger.info("=== INICIANDO PIPELINE DE INTEGRAÇÃO ===")
     
     try:
