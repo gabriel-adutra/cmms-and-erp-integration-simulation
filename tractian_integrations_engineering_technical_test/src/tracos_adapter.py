@@ -14,7 +14,7 @@ from pymongo.errors import (
     ConnectionFailure, NotPrimaryError, ExecutionTimeout, WTimeoutError
 )
 
-from .config import config
+from config import config
 from loguru import logger
 
 
