@@ -12,9 +12,9 @@ from typing import Dict, Optional
 from dataclasses import dataclass
 from loguru import logger
 
-from .client_adapter import client_adapter
-from .tracos_adapter import tracos_adapter
-from .translator import data_translator
+from client_adapter import client_adapter
+from tracos_adapter import tracos_adapter
+from translator import data_translator
 
 
 @dataclass
