@@ -14,7 +14,7 @@ import json
 class DataTranslator:
 
     def __init__(self):
-        logger.info("DataTranslator inicializado.")
+        logger.info("DataTranslator pronto para conversão de dados (Cliente ↔ TracOS).")
 
     
     VALID_TRACOS_STATUS = {
@@ -61,8 +61,6 @@ class DataTranslator:
             error_msg = f"Campos obrigatórios ausentes em {data_type}: {', '.join(missing_fields)}"
             logger.error(error_msg)
             raise KeyError(error_msg)
-        
-        logger.debug(f"Validação de campos {data_type} bem-sucedida")
 
     
     def convert_client_to_tracos(self, client_data: Dict) -> Dict:

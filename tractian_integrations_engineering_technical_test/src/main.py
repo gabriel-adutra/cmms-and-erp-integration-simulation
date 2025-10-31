@@ -17,17 +17,17 @@ async def inbound_flow():
     
     files_data = client_adapter.read_inbound_files()
     if not files_data:
-        logger.info("Nenhum arquivo encontrado para processamento")
+        logger.info("Nenhum arquivo encontrado.")
         return None
     
-    logger.debug(f"Processando {len(files_data)} arquivo(s)")
+    logger.debug(f"Processando {len(files_data)} arquivo(s) encontrados.")
     for client_data in files_data:
         try:
             if not client_adapter.validate_client_data(client_data):
                 logger.warning(f"Dados inválidos: {client_data.get('orderNo', 'N/A')}")
                 continue
                 
-            tracos_data = data_translator.client_to_tracos(client_data)
+            tracos_data = data_translator.convert_client_to_tracos(client_data)
             
             await tracos_adapter.upsert_workorder(tracos_data)
             

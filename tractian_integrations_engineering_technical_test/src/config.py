@@ -20,7 +20,7 @@ class Config:
         if self._initialized:
             return None
 
-        logger.info(" Iniciando configurações do sistema TracOS ↔ Cliente.")    
+        logger.info(" Inicializando configurações de integração TracOS ↔ Cliente.")    
         self.MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
         self.MONGO_DATABASE = os.getenv("MONGO_DATABASE", "tractian")
         self.MONGO_COLLECTION = os.getenv("MONGO_COLLECTION", "workorders")
@@ -29,7 +29,7 @@ class Config:
         self.DATA_OUTBOUND_DIR = Path(os.getenv("DATA_OUTBOUND_DIR", "./data/outbound"))
         
         self._initialized = True
-        logger.info("Configurações inicializadas com sucesso!")
+        logger.info("Configurações inicializadas com sucesso!!!")
 
 
 config = Config()

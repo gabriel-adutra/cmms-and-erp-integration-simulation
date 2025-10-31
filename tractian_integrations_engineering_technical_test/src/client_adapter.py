@@ -1,9 +1,5 @@
 
-"""
-Adaptador responsável pelas operações de I/O com arquivos JSON do cliente.
-Esse módulo centraliza todas as operações de leitura e escrita de arquivos
-JSON, garantindo tratamento consistente de erros e logging estruturado.
-"""
+""" Adaptador responsável pelas operações de I/O com arquivos JSON do cliente. """
 
 import json
 from typing import List, Dict, Optional
@@ -16,50 +12,48 @@ from loguru import logger
 class ClientAdapter:
 
     def __init__(self):
-        logger.info("Inicializado Classe ClientAdapter...")
+        logger.info("Inicializado ClientAdapter...")
         self.inbound_dir = config.DATA_INBOUND_DIR
         self.outbound_dir = config.DATA_OUTBOUND_DIR
-        logger.info("Classe ClientAdapter inicializada.")
+        logger.info("ClientAdapter pronto para gerenciar arquivos JSON do cliente.")
 
     
     def read_inbound_files(self) -> List[Dict]:
-        logger.debug("Entrando na função read_inbound_files()")
-
         files_data = []
         json_files = list(self.inbound_dir.glob("*.json"))
         if not json_files:
-            logger.warning(f"Função read_inbound_files() retornando lista vazia. Nenhum arquivo JSON encontrado.")
+            logger.warning(f"Nenhum arquivo JSON encontrado.")
             return files_data
         
-        logger.debug(f"Processando {len(json_files)} arquivo(s) JSON.")
+        logger.info(f"Iniciando leitura de {len(json_files)} arquivo(s) do inbound.")
         for json_file in json_files:
             file_data = self._read_single_file(json_file)
             if file_data is not None:
                 files_data.append(file_data)
         
-        logger.info(f"Função read_inbound_files() retornando {len(files_data)} arquivos válidos.")
+        logger.info(f"Diretório inbound com {len(files_data)} arquivo(s) JSON lidos.")
         return files_data
     
     
     def _read_single_file(self, file_path: Path) -> Optional[Dict]:
-        logger.debug(f"Entrando na função _read_single_file(). Lendo arquivo '{file_path.name}'.")
+        logger.debug(f"Lendo arquivo '{file_path.name}'.")
 
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                logger.debug(f"Função _read_single_file() retornando arquivo {file_path.name} lido.")
+                logger.debug(f"Arquivo {file_path.name} lido.")
                 return data
         
         except FileNotFoundError:
-            logger.error(f"Função _read_single_file() retornando None - arquivo não encontrado: {file_path.name}")
+            logger.error(f"Arquivo não encontrado: {file_path.name} ")
         except PermissionError:
-            logger.error(f"Função _read_single_file() retornando None - sem permissão para ler: {file_path.name}")
+            logger.error(f"Sem permissão para ler: {file_path.name}")
         except JSONDecodeError as e:
-            logger.error(f"Função _read_single_file() retornando None - JSON inválido em {file_path.name}: {e}")
+            logger.error(f"Arquivo contém JSON inválido: {file_path.name}")
         except OSError as e:
-            logger.error(f"Função _read_single_file() retornando None - erro de sistema: {file_path.name}")
+            logger.error(f"Erro de sistema ao ler {file_path.name}: {e}")
         except Exception as e:
-            logger.error(f"Função _read_single_file() retornando None - erro inesperado: {file_path.name}")
+            logger.error(f"Erro inesperado ao ler {file_path.name}: {e}")
             
         return None
     
@@ -87,7 +81,7 @@ class ClientAdapter:
     
 
     def validate_client_data(self, data: Dict) -> bool:
-        logger.info(f"Entrando na função validate_client_data() com parâmetros: {data} para validação de campos obrigatórios.")
+        logger.info(f"Validando dados obrigatórios do cliente...")
         
         missing_fields = []
         required_fields = ["orderNo", "summary", "creationDate"]
@@ -96,10 +90,10 @@ class ClientAdapter:
                 missing_fields.append(field)
         
         if missing_fields:
-            logger.warning(f"Função validate_client_data() retornando False - campos ausentes: {', '.join(missing_fields)}")
+            logger.warning(f"Os dados não são válidos. Campos ausentes: {', '.join(missing_fields)}.")
             return False
         
-        logger.info(f"Função validate_client_data() retornando True para orderNo={data.get('orderNo')}")
+        logger.info(f"Os dados são válidos para orderNo={data.get('orderNo')}.")
         return True
 
 
