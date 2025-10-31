@@ -64,9 +64,6 @@ async def outbound_flow():
 
 
 async def main():
-    """ Função principal - executa pipeline completo de integração. """
-
-
     logger.info("=============== INICIANDO PIPELINE DE INTEGRAÇÃO ===============")
     
     try:
