@@ -97,34 +97,17 @@ class DataTranslator:
                 client_data["deletedDate"], "deletedDate"
             )
 
-        logger.info(f"Dados do cliente convertidos em dados do TracOS:\n{json.dumps({'Dados do cliente': client_data, 'Dados do TracOS': tracos_data}, indent=2, ensure_ascii=False, default=str)}")
+        logger.info(f"Dados do cliente convertidos em dados do TracOS para workorder com orderNo={client_data['orderNo']}:\n{json.dumps({'Dados do cliente': client_data, 'Dados do TracOS': tracos_data}, indent=2, ensure_ascii=False, default=str)}")
                 
-        #logger.info(f"Dados do cliente: {client_data} convertidos em dados do TracOs: {tracos_data}.")
-        #logger.info(f"Convertido Cliente → TracOS: order {client_data['orderNo']} com status '{status}'")
         return tracos_data
     
     
-    def tracos_to_client(self, tracos_data: Dict) -> Dict:
-        """
-        Converte dados do formato TracOS para Cliente.
+    def convert_tracos_to_client(self, tracos_data: Dict) -> Dict:
         
-        Args:
-            tracos_data: Dados no formato do sistema TracOS
-            
-        Returns:
-            Dados convertidos para o formato Cliente
-            
-        Raises:
-            KeyError: Se campos obrigatórios estiverem ausentes
-            ValueError: Se dados estiverem em formato inválido
-        """
-        # Validar campos obrigatórios do TracOS
         required_fields = ["number", "title", "status", "createdAt", "updatedAt"]
         self._validate_required_fields(tracos_data, required_fields, "dados do TracOS")
         
         status = tracos_data["status"]
-        
-        # Validar se status é válido
         if status not in self.VALID_TRACOS_STATUS:
             error_msg = f"Status TracOS inválido: {status}"
             logger.error(error_msg)
@@ -157,7 +140,8 @@ class DataTranslator:
             "isActive": status == "in_progress"
         }
         
-        logger.info(f"Convertido TracOS → Cliente: order {tracos_data['number']} com status '{status}'")
+        logger.info(f" Dados do TrackOS convertido em Dados do Cliente para workorder com number={tracos_data['number']}:\n{json.dumps({'Dados do TracOS': tracos_data, 'Dados do Cliente': client_data}, indent=2, ensure_ascii=False, default=str)}")
+        
         return client_data
 
 
