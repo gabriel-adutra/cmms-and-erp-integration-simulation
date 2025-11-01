@@ -6,7 +6,7 @@ proper handling of special cases.
 """
 
 from typing import Dict
-from datetime import datetime
+from datetime import datetime, timezone
 from loguru import logger
 import json
 
@@ -116,10 +116,18 @@ class DataTranslator:
             logger.error(error_msg)
             raise ValueError(error_msg)
         
-        # Convert datetimes to ISO strings
+        # Convert datetimes to ISO strings with explicit UTC offset (+00:00)
         try:
-            creation_date = tracos_data["createdAt"].isoformat()
-            update_date = tracos_data["updatedAt"].isoformat()
+            created_dt = tracos_data["createdAt"]
+            updated_dt = tracos_data["updatedAt"]
+
+            if created_dt.tzinfo is None:
+                created_dt = created_dt.replace(tzinfo=timezone.utc)
+            if updated_dt.tzinfo is None:
+                updated_dt = updated_dt.replace(tzinfo=timezone.utc)
+
+            creation_date = created_dt.isoformat()
+            update_date = updated_dt.isoformat()
         except AttributeError as e:
             logger.error(f"Error converting datetimes to ISO: {e}")
             raise ValueError(f"TracOS datetimes must be datetime objects: {e}")
