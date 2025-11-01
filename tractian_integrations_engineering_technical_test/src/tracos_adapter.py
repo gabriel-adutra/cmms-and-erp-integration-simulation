@@ -1,4 +1,4 @@
-""" Adaptador responsável pelas operações no MongoDB do TracOS. """
+"""Adapter responsible for MongoDB operations for TracOS."""
 
 import asyncio
 from typing import List, Dict, Optional
@@ -12,9 +12,9 @@ from loguru import logger
 class TracosAdapter:
     
     def __init__(self):
-        logger.info("Inicializado TracosAdapter...")
+        logger.info("TracosAdapter initialized...")
         self._mongo_client: Optional[AsyncIOMotorClient] = None
-        logger.info("TracosAdapter pronto para operações com o banco MongoDB do TracOS.")
+        logger.info("TracosAdapter ready for operations with TracOS MongoDB.")
 
     
     async def get_mongo_client(self) -> AsyncIOMotorClient:
@@ -35,7 +35,7 @@ class TracosAdapter:
         return db[config.MONGO_COLLECTION]
     
     
-    # Exceções que merecem retry (problemas temporários de rede/conexão)
+    # Exceptions that should be retried (temporary network/connection issues)
     RETRIABLE_ERRORS = (
         NetworkTimeout, AutoReconnect, ServerSelectionTimeoutError,
         ConnectionFailure, NotPrimaryError, ExecutionTimeout, WTimeoutError
@@ -49,16 +49,16 @@ class TracosAdapter:
                 
             except self.RETRIABLE_ERRORS as e:
                 if attempt < max_attempts - 1:
-                    wait_time = 2 ** attempt  # Backoff exponencial: 1s, 2s, 4s
-                    logger.warning(f"Tentativa {attempt + 1} falhou, retry em {wait_time}s: {e}")
+                    wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
+                    logger.warning(f"Attempt {attempt + 1} failed, retrying in {wait_time}s.")
                     await asyncio.sleep(wait_time)
                     continue
                 else:
-                    logger.error(f"MongoDB falhou após {max_attempts} tentativas: {e}")
+                    logger.error(f"MongoDB failed after {max_attempts} attempts. Details: {e}")
                     raise e
                     
             except PyMongoError as e:
-                logger.error(f"MongoDB erro permanente: {e}")
+                logger.error(f"MongoDB permanent error: {e}")
                 raise e
             
     
@@ -67,21 +67,21 @@ class TracosAdapter:
             workorders = []
             collection = await self.get_workorders_collection()
             
-            # Busca workorders não sincronizadas
+            # Fetch unsynced workorders
             cursor = collection.find({"isSynced": {"$ne": True}})
             
             async for doc in cursor:
-                # Converte ObjectId para string para serialização JSON
+                # Convert ObjectId to string for JSON serialization
                 doc["_id"] = str(doc["_id"])
                 workorders.append(doc)
             
-            logger.info(f"Encontrados {len(workorders)} workorder(s) não sincronizada(s) no TrackOS.")
+            logger.info(f"Found {len(workorders)} unsynced workorder(s) in TracOS.")
             return workorders
         
         try:
             return await self._retry_mongo_operation(_read_unsynced_workorders)
         except PyMongoError as e:
-            logger.error(f"Erro ao ler workorders não sincronizadas. Detalhes: {e}")
+            logger.error(f"Error reading unsynced workorders. Details: {e}")
             return []
         
     
@@ -89,19 +89,19 @@ class TracosAdapter:
         async def _upsert_workorder():
             collection = await self.get_workorders_collection()
             
-            # Usar 'number' como chave única para identificar workorders
+            # Use 'number' as unique key to identify workorders
             filter_query = {"number": workorder_data["number"]}
             
-            # Adicionar campos de controle de sincronização
+            # Add sync control fields
             workorder_data_copy = workorder_data.copy()
             workorder_data_copy.update({
                 "isSynced": False,
                 "updatedAt": datetime.now(timezone.utc)
             })
  
-            logger.debug(f"Workorder com number={workorder_data['number']} marcada como não sincronizada no TrackOS. (isSynced=False)")
+            logger.debug(f"Workorder with number={workorder_data['number']} marked as not synced in TracOS. (isSynced=False)")
             
-            # Upsert: atualiza se existe, insere se não existe, removendo syncedAt
+            # Upsert: update if exists, insert if not, removing syncedAt
             result = await collection.update_one(
                 filter_query,
                 {
@@ -111,14 +111,14 @@ class TracosAdapter:
                 upsert=True
             )
 
-            action = "inserida" if result.upserted_id else "atualizada"
-            logger.debug(f"Workorder com number={workorder_data['number']} foi {action}.")
+            action = "inserted" if result.upserted_id else "updated"
+            logger.debug(f"Workorder with number={workorder_data['number']} was {action}.")
             return True
         
         try:
             return await self._retry_mongo_operation(_upsert_workorder)
         except PyMongoError as e:
-            logger.error(f"Erro ao salvar workorder {workorder_data.get('number')}: {e}")
+            logger.error(f"Error saving workorder {workorder_data.get('number')}: {e}")
             return False
         
     
@@ -136,16 +136,16 @@ class TracosAdapter:
             )
             
             if result.modified_count > 0:
-                logger.debug(f"Workorder com number={number} sincronizada no TrackOS. (isSynced=True).")
+                logger.debug(f"Workorder with number={number} synced in TracOS. (isSynced=True).")
                 return True
             else:
-                logger.warning(f"Workorder com number={number} não encontrada no TrackOS.")
+                logger.warning(f"Workorder with number={number} not found in TracOS.")
                 return False
         
         try:
             return await self._retry_mongo_operation(_mark_workorder_as_synced)
         except PyMongoError as e:
-            logger.error(f"Erro ao marcar workorder {number} como sincronizada: {e}")
+            logger.error(f"Error marking workorder {number} as synced: {e}")
             return False
         
             
