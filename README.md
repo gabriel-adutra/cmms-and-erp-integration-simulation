@@ -79,11 +79,16 @@ tractian_integrations_engineering_technical_test/
 ## Pré-requisitos
 
 Antes de começar, certifique-se de ter instalado:
-- **Python 3.11+**
+- **Python 3.11.x**
 - **Docker e Docker Compose**
 - **Poetry** para gerenciamento de dependências
 
 ## Configuração do Ambiente
+
+Antes de executar os comandos abaixo, navegue até o diretório do projeto:
+```bash
+cd tractian_integrations_engineering_technical_test/
+```
 
 ### 1. Instalar Dependências
 ```bash
@@ -121,13 +126,7 @@ poetry run python src/main.py
 ls data/outbound/
 ```
 
-## Executando o Sistema
-
-### Rodar Pipeline Completo
-```bash
-# Executa fluxo inbound + outbound completo
-poetry run python src/main.py
-```
+Esperado: 10 arquivos JSON nomeados como `workorder_{number}.json` (os arquivos são sobrescritos a cada execução).
 
 ## Testes
 
@@ -183,13 +182,49 @@ ls data/inbound/
 O arquivo `.env` contém as configurações necessárias:
 ```bash
 MONGO_URI=mongodb://localhost:27017/tractian
+MONGO_DATABASE=tractian
+MONGO_COLLECTION=workorders
 DATA_INBOUND_DIR=./data/inbound  
 DATA_OUTBOUND_DIR=./data/outbound
 ```
 
+### Comportamento de .env e precedência (python-decouple)
+- Carregamento automático: as chaves são lidas automaticamente do `.env` se ele existir na raiz do projeto.
+- Precedência: variáveis exportadas no ambiente > valores do `.env` > defaults do código.
+- Defaults seguros: se não houver export nem `.env`, os valores padrão são usados:
+  - `MONGO_URI = mongodb://localhost:27017`
+  - `DATA_INBOUND_DIR = ./data/inbound`
+  - `DATA_OUTBOUND_DIR = ./data/outbound`
+- Observação: valores vazios contam como valor. Evite definir `MONGO_URI=""` por engano.
+
+### Política de Logs
+- INFO: marcos de processamento (início/fim de pipeline, totais processados, sucesso de configuração).
+- DEBUG: detalhes e payloads (ex.: conteúdo completo de registros), útil para investigação local.
+- WARNING: situações anômalas recuperáveis (ex.: arquivo inválido ignorado).
+- ERROR: falhas não recuperáveis do passo atual (ex.: erro após todas as tentativas de retry).
+Recomendação: use INFO no dia a dia; habilite DEBUG apenas para diagnóstico.
+
+### Decisões de Design (resumo)
+- Configuração centralizada (singleton) carregada uma única vez no processo.
+- Idempotência: upsert por `number` no MongoDB garante reprocessamento seguro.
+- Normalização: datas em UTC ISO 8601; mapeamento de status cliente ↔ TracOS.
+- Regra de status: ausência de flags ativas no cliente implica `status="pending"` no TracOS.
+- Resiliência: retry com backoff exponencial na camada de acesso ao Mongo.
+- Logging enxuto: payloads detalhados apenas em DEBUG; marcos em INFO.
+
+### Checklist de Conformidade (project_requirements)
+- Inbound (ler, validar, traduzir, upsert em Mongo): PASS
+- Outbound (buscar `isSynced=false`, traduzir, escrever, marcar `isSynced=true` + `syncedAt`): PASS
+- Normalização (datas UTC ISO 8601; enums/status): PASS
+- Resiliência (logs claros, I/O robusto, retry simples para Mongo): PASS
+- Config via variáveis de ambiente (com `.env` opcional): PASS
+- README completo (estrutura, como rodar, arquitetura): PASS
+- Teste automatizado end-to-end com pytest: PASS
+
+
 ## Exemplo de Dados
 
-### JSON de Entrada (Cliente → TracOS)
+### Workorder de Entrada - Inbound:
 ```json
 {
   "orderNo": 1,
@@ -205,7 +240,7 @@ DATA_OUTBOUND_DIR=./data/outbound
 }
 ```
 
-### Formato TracOS (MongoDB Interno)
+### Workorder no TracOS (MongoDB Interno) após conversão (Cliente → TracOS):
 ```json
 {
   "_id": "ObjectId('69029d7dbc2225d88a00780d')",
@@ -220,13 +255,13 @@ DATA_OUTBOUND_DIR=./data/outbound
 }
 ```
 
-### JSON de Saída (TracOS → Cliente)
+### Workorder no Outbound após conversão (TracOS → Cliente):
 ```json
 {
   "orderNo": 1,
   "summary": "Example workorder #1",
-  "creationDate": "2025-09-30T23:04:29.045000",
-  "lastUpdateDate": "2025-10-29T23:04:29.685000",
+  "creationDate": "2025-09-30T23:04:29.045000+00:00",
+  "lastUpdateDate": "2025-10-29T23:04:29.685000+00:00",
   "isDeleted": false,
   "deletedDate": null,
   "isDone": false,
@@ -237,7 +272,9 @@ DATA_OUTBOUND_DIR=./data/outbound
 }
 ```
 
-### Formato TracOS (Após Sincronização)
+Observação: o MongoDB armazena datetimes com precisão de milissegundos; microsegundos podem ser truncados (ex.: 374263 → 374000).
+
+### Workorder no TracOS (MongoDB Interno) após sincronização:
 ```json
 {
   "_id": "ObjectId('69029d7dbc2225d88a00780d')",
