@@ -50,7 +50,7 @@ class DataTranslator:
                 return tracos_status
         
         # Padrão se nenhum flag estiver True
-        logger.debug("Nenhum status específico encontrado, usando padrão: pending")
+        logger.debug("Nenhum status específico encontrado. Usando padrão: pending")
         return "pending"
     
     

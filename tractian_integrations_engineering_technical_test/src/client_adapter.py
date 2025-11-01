@@ -22,7 +22,7 @@ class ClientAdapter:
         files_data = []
         json_files = list(self.inbound_dir.glob("*.json"))
         if not json_files:
-            logger.warning(f"Nenhum arquivo JSON encontrado.")
+            logger.info(f"Nenhum arquivo JSON encontrado no inbound.")
             return files_data
         
         logger.info(f"Iniciando leitura de {len(json_files)} workorders(s) do inbound.")
@@ -59,7 +59,7 @@ class ClientAdapter:
     
     
     def write_outbound_file(self, filename: str, data: Dict) -> bool:
-        logger.debug(f"Criando workorder='{filename}' em outbound.")
+        logger.info(f"Criando workorder='{filename}' em outbound.")
         
         file_path = self.outbound_dir / filename
         
@@ -67,7 +67,7 @@ class ClientAdapter:
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
             
-            logger.info(f"Workorder={filename} criado com sucesso em outbound.")
+            logger.info(f"Workorder={filename} criado com sucesso.")
             return True
             
         except PermissionError:
@@ -81,7 +81,7 @@ class ClientAdapter:
     
 
     def validate_client_data(self, data: Dict) -> bool:
-        logger.info(f"Validando dados obrigatórios do cliente...")
+        logger.info(f"Validando dados obrigatórios do workorder de orderNo={data.get('orderNo')}")
         
         missing_fields = []
         required_fields = ["orderNo", "summary", "creationDate"]

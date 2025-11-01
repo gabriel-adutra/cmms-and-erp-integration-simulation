@@ -17,7 +17,6 @@ async def inbound_flow():
     
     files_data = client_adapter.read_inbound_files()
     if not files_data:
-        logger.info("Nenhum arquivo encontrado.")
         return None
     
     logger.debug(f"Processando {len(files_data)} workorder(s) encontrados.")
