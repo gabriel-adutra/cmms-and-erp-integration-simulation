@@ -1,4 +1,4 @@
-"""Testes de integração end-to-end do sistema TracOS ↔ Cliente."""
+"""End-to-end integration tests for the TracOS ↔ Client system."""
 
 import os
 import json
@@ -13,16 +13,16 @@ from config import config
 from main import main
 from tracos_adapter import tracos_adapter
 
+
 EXPECTED_WORKORDER_COUNT = 10
 DATE_FIELDS = ['creationDate', 'lastUpdateDate', 'deletedDate']
 
 
 class IntegrationTestHelper:
-    """Helper para testes de integração: setup, cleanup e validação."""
+    """Helper for integration tests: setup, cleanup, and validation."""
     
     @staticmethod
     async def cleanup_environment():
-        """Limpa MongoDB e arquivos JSON para garantir ambiente limpo."""
         try:
             client = await tracos_adapter.get_mongo_client()
             db = client[config.MONGO_DATABASE]
@@ -39,7 +39,6 @@ class IntegrationTestHelper:
     
     @staticmethod
     def run_setup_script() -> subprocess.CompletedProcess:
-        """Executa setup.py para gerar dados de teste."""
         return subprocess.run(
             ["python", "setup.py"], 
             cwd=Path(__file__).parent.parent,
@@ -49,13 +48,12 @@ class IntegrationTestHelper:
     
     @staticmethod
     def read_json_file(file_path: Path) -> dict:
-        """Lê e retorna conteúdo de arquivo JSON."""
         with open(file_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     
     @staticmethod
     def compare_datetime_fields(inbound_value: str, outbound_value: str, field: str, file_index: int):
-        """Compara campos de data com tolerância de 1 segundo."""
+        """Compare datetime fields with a 1-second tolerance."""
         inbound_dt = datetime.fromisoformat(inbound_value.replace('Z', '+00:00'))
         outbound_dt = datetime.fromisoformat(outbound_value.replace('Z', '+00:00'))
         if inbound_dt.tzinfo is None:
@@ -65,19 +63,17 @@ class IntegrationTestHelper:
         
         diff = abs((inbound_dt - outbound_dt).total_seconds())
         assert diff < 1.0, \
-            f"Campo {field} com diferença de tempo muito grande no arquivo {file_index}: {inbound_value} != {outbound_value}"
+            f"Field {field} has too large time difference in file {file_index}: {inbound_value} != {outbound_value}"
 
 
 test_helper = IntegrationTestHelper()
 
 
 def test_complete_pipeline_end_to_end():
-    """Teste end-to-end: limpa ambiente, executa setup, roda pipeline e valida resultados."""
     async def _run_test():
         await test_helper.cleanup_environment()
-        
         result = test_helper.run_setup_script()
-        assert result.returncode == 0, f"Setup falhou: {result.stderr}"
+        assert result.returncode == 0, f"Setup failed: {result.stderr}"
         
         await main()
         
@@ -88,7 +84,7 @@ def test_complete_pipeline_end_to_end():
 
 
 async def validate_data_integrity():
-    """Valida que dados inbound == outbound (idempotência)."""
+    """Validate that inbound data equals outbound data (idempotence)."""
     business_fields = [
         'orderNo', 'summary', 'isDone', 'isCanceled', 
         'isOnHold', 'isPending', 'isDeleted', 'deletedDate'
@@ -111,18 +107,18 @@ async def validate_data_integrity():
                 inbound_data.get('isActive', False)
             ]):
                 assert outbound_value == True, \
-                    f"isPending deve ser true quando todos os status eram false no arquivo {i}"
+                    f"isPending must be true when all statuses were false in file {i}"
             elif field in DATE_FIELDS and inbound_value and outbound_value:
                 test_helper.compare_datetime_fields(inbound_value, outbound_value, field, i)
             else:
                 assert inbound_value == outbound_value, \
-                    f"Campo {field} diferente no arquivo {i}: {inbound_value} != {outbound_value}"
+                    f"Field {field} differs in file {i}: {inbound_value} != {outbound_value}"
         
-        assert 'isActive' in outbound_data, f"Campo isActive ausente no workorder_{i}.json"
+    assert 'isActive' in outbound_data, f"Field isActive missing in workorder_{i}.json"
 
 
 async def validate_sync_status():
-    """Valida que todos os registros foram marcados como isSynced=true."""
+    """Validate that all records were marked as isSynced=true."""
     client = await tracos_adapter.get_mongo_client()
     db = client[config.MONGO_DATABASE]
     collection = db[config.MONGO_COLLECTION]
@@ -131,6 +127,6 @@ async def validate_sync_status():
     total_count = await collection.count_documents({})
     
     assert synced_count == total_count == EXPECTED_WORKORDER_COUNT, \
-        f"Esperado {EXPECTED_WORKORDER_COUNT} registros sincronizados, encontrado {synced_count}/{total_count}"
+        f"Expected {EXPECTED_WORKORDER_COUNT} synchronized records, found {synced_count}/{total_count}"
     
     await tracos_adapter.close_connection()
