@@ -12,8 +12,7 @@ import asyncio
 import sys
 from pathlib import Path
 from typing import Dict, List
-from datetime import datetime
-import pytest
+from datetime import datetime, timezone
 from motor.motor_asyncio import AsyncIOMotorClient
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -40,7 +39,7 @@ class IntegrationTestHelper:
         """
         # Limpar MongoDB usando o adapter refatorado
         try:
-            client = await tracos_adapter.get_client()
+            client = await tracos_adapter.get_mongo_client()
             db = client[config.MONGO_DATABASE]
             await db[config.MONGO_COLLECTION].delete_many({})
             await tracos_adapter.close_connection()
@@ -77,7 +76,7 @@ class IntegrationTestHelper:
         Returns:
             Número real de registros encontrados
         """
-        client = await tracos_adapter.get_client()
+        client = await tracos_adapter.get_mongo_client()
         db = client[config.MONGO_DATABASE]
         collection = db[config.MONGO_COLLECTION]
         
@@ -205,7 +204,11 @@ async def validate_data_integrity():
                     # Comparar apenas até os segundos, ignorando diferenças de microsegundos
                     inbound_dt = datetime.fromisoformat(inbound_value.replace('Z', '+00:00'))
                     outbound_dt = datetime.fromisoformat(outbound_value.replace('Z', '+00:00'))
-                    
+                    # Normalizar para timezone-aware (UTC) se necessário
+                    if inbound_dt.tzinfo is None:
+                        inbound_dt = inbound_dt.replace(tzinfo=timezone.utc)
+                    if outbound_dt.tzinfo is None:
+                        outbound_dt = outbound_dt.replace(tzinfo=timezone.utc)
                     # Diferença máxima aceitável: 1 segundo (MongoDB pode arredondar microsegundos)
                     diff = abs((inbound_dt - outbound_dt).total_seconds())
                     assert diff < 1.0, \
@@ -229,7 +232,7 @@ async def validate_sync_status():
     foram adequadamente marcadas como sincronizadas após o processamento.
     """
     # Usar TracosAdapter para validação (em vez de conexão direta)
-    client = await tracos_adapter.get_client()
+    client = await tracos_adapter.get_mongo_client()
     db = client[config.MONGO_DATABASE]
     collection = db[config.MONGO_COLLECTION]
     
