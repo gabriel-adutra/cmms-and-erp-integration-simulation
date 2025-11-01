@@ -85,6 +85,12 @@ Make sure you have installed:
 
 ## Environment Setup
 
+Clone this repository:
+```bash
+git clone https://github.com/gabriel-adutra/cmms-and-erp-integration-simulation.git
+cd cmms-and-erp-integration-simulation
+```
+
 Before running the commands below, navigate to the project directory:
 ```bash
 cd tractian_integrations_engineering_technical_test/
@@ -286,4 +292,4 @@ Note: MongoDB stores datetimes with millisecond precision; microseconds may be t
 
 ---
 
-*TracOS ↔ Client integration system implemented with a focus on modularity, resilience, and ease of extension to new systems.*# TracOS ↔ Client Integration System
+*TracOS ↔ Client integration system implemented with a focus on modularity, resilience, and ease of extension to new systems.*
