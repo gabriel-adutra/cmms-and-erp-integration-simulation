@@ -38,7 +38,7 @@ async def inbound_flow():
 async def outbound_flow():
     """ Fluxo outbound: TracOS → Cliente. Lê workorders não sincronizadas do MongoDB, converte para formato Cliente e gera arquivos JSON."""
 
-    logger.info("----------------- Iniciando fluxo outbound (TracOS → Cliente) ----------------- ")
+    logger.info("----------------- Iniciando fluxo outbound (TracOS → Cliente) -----------------")
     
     workorders = await tracos_adapter.read_unsynced_workorders()
     if not workorders:
@@ -49,7 +49,7 @@ async def outbound_flow():
     for tracos_data in workorders:
         try:
             client_data = data_translator.convert_tracos_to_client(tracos_data)
-            
+
             workorder_number = tracos_data['number']
             filename = f"workorder_{workorder_number}.json"
             success = client_adapter.write_outbound_file(filename, client_data)

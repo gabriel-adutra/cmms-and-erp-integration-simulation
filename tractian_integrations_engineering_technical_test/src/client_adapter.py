@@ -48,7 +48,7 @@ class ClientAdapter:
             logger.error(f"Arquivo não encontrado: {file_path.name} ")
         except PermissionError:
             logger.error(f"Sem permissão para ler: {file_path.name}")
-        except JSONDecodeError as e:
+        except JSONDecodeError:
             logger.error(f"Arquivo contém JSON inválido: {file_path.name}")
         except OSError as e:
             logger.error(f"Erro de sistema ao ler {file_path.name}. Detalhes: {e}")

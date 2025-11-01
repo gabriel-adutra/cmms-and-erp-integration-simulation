@@ -5,7 +5,7 @@ de dados entre os sistemas Cliente e TracOS, garantindo compliance
 com os schemas e tratamento adequado de casos especiais.
 """
 
-from typing import Dict, Optional
+from typing import Dict
 from datetime import datetime
 from loguru import logger
 import json
@@ -97,7 +97,7 @@ class DataTranslator:
                 client_data["deletedDate"], "deletedDate"
             )
 
-        logger.info(f"Dados do cliente convertidos em dados do TracOS para workorder com orderNo={client_data['orderNo']}:\n{json.dumps({'Dados do cliente': client_data, 'Dados do TracOS': tracos_data}, indent=2, ensure_ascii=False, default=str)}")
+        logger.debug(f"Dados do cliente convertidos em dados do TracOS para workorder com orderNo={client_data['orderNo']}:\n{json.dumps({'Dados do cliente': client_data, 'Dados do TracOS': tracos_data}, indent=2, ensure_ascii=False, default=str)}")
                 
         return tracos_data
     
@@ -140,7 +140,7 @@ class DataTranslator:
             "isActive": status == "in_progress"
         }
         
-        logger.info(f" Dados do TrackOS convertido em Dados do Cliente para workorder com number={tracos_data['number']}:\n{json.dumps({'Dados do TracOS': tracos_data, 'Dados do Cliente': client_data}, indent=2, ensure_ascii=False, default=str)}")
+        logger.debug(f" Dados do TrackOS convertido em Dados do Cliente para workorder com number={tracos_data['number']}:\n{json.dumps({'Dados do TracOS': tracos_data, 'Dados do Cliente': client_data}, indent=2, ensure_ascii=False, default=str)}")
         
         return client_data
 
