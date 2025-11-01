@@ -9,7 +9,6 @@ from tracos_adapter import tracos_adapter
 from translator import data_translator
 
 
-
 async def inbound_flow():
     """Inbound flow: Client → TracOS. Reads client JSON files, converts to TracOS format, and saves to MongoDB."""
 
