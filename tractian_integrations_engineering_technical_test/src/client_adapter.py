@@ -25,23 +25,23 @@ class ClientAdapter:
             logger.warning(f"Nenhum arquivo JSON encontrado.")
             return files_data
         
-        logger.info(f"Iniciando leitura de {len(json_files)} arquivo(s) do inbound.")
+        logger.info(f"Iniciando leitura de {len(json_files)} workorders(s) do inbound.")
         for json_file in json_files:
             file_data = self._read_single_file(json_file)
             if file_data is not None:
                 files_data.append(file_data)
         
-        logger.info(f"Diretório inbound com {len(files_data)} arquivo(s) JSON lidos.")
+        logger.info(f"Diretório inbound com {len(files_data)} workorders(s) JSON lidos.")
         return files_data
     
     
     def _read_single_file(self, file_path: Path) -> Optional[Dict]:
-        logger.debug(f"Lendo arquivo '{file_path.name}'.")
+        logger.debug(f"Lendo workorder '{file_path.name}'.")
 
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                logger.debug(f"Arquivo {file_path.name} lido.")
+                logger.debug(f"workorder {file_path.name} lido.")
                 return data
         
         except FileNotFoundError:
@@ -51,15 +51,15 @@ class ClientAdapter:
         except JSONDecodeError as e:
             logger.error(f"Arquivo contém JSON inválido: {file_path.name}")
         except OSError as e:
-            logger.error(f"Erro de sistema ao ler {file_path.name}: {e}")
+            logger.error(f"Erro de sistema ao ler {file_path.name}. Detalhes: {e}")
         except Exception as e:
-            logger.error(f"Erro inesperado ao ler {file_path.name}: {e}")
+            logger.error(f"Erro inesperado ao ler {file_path.name}. Detalhes: {e}")
             
         return None
     
     
     def write_outbound_file(self, filename: str, data: Dict) -> bool:
-        logger.debug(f"Entrando na função write_outbound_file() com parâmetros: filename='{filename}', data com {len(data)} campos")
+        logger.debug(f"Criando workorder='{filename}' em outbound.")
         
         file_path = self.outbound_dir / filename
         
@@ -67,15 +67,15 @@ class ClientAdapter:
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
             
-            logger.info(f"Função write_outbound_file() retornando True - arquivo {filename} criado com sucesso")
+            logger.info(f"Workorder={filename} criado com sucesso em outbound.")
             return True
             
         except PermissionError:
-            logger.error(f"Função write_outbound_file() retornando False - sem permissão para escrever: {filename}")
+            logger.error(f"Sem permissão para escrever {filename} em outbound.")
         except OSError as e:
-            logger.error(f"Função write_outbound_file() retornando False - erro de sistema ao escrever {filename}")
+            logger.error(f"Erro de sistema ao escrever {filename} em outbound. Detalhes: {e}")
         except Exception as e:
-            logger.error(f"Função write_outbound_file() retornando False - erro inesperado ao escrever {filename}")
+            logger.error(f"Erro inesperado ao escrever {filename} em outbound. Detalhes {e}")
             
         return False    
     
@@ -93,7 +93,7 @@ class ClientAdapter:
             logger.warning(f"Os dados não são válidos. Campos ausentes: {', '.join(missing_fields)}.")
             return False
         
-        logger.info(f"Os dados são válidos para orderNo={data.get('orderNo')}.")
+        logger.info(f"Os dados são válidos para o workorder de orderNo={data.get('orderNo')}.")
         return True
 
 
