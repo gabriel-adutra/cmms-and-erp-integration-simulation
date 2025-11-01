@@ -9,44 +9,44 @@ Este projeto implementa um serviço Python assíncrono que simula uma integraç�
 O sistema foi projetado com **separação clara de responsabilidades** para facilitar a adição de novas integrações sem modificar módulos existentes:
 
 ### Módulos Principais
-- **`client_adapter.py`** - Operações de leitura/escrita com sistema cliente (arquivos JSON)
-- **`tracos_adapter.py`** - Operações de leitura/escrita com sistema TracOS (MongoDB)
-- **`translator.py`** - Tradução bidirecional de formatos de dados entre sistemas
-- **`config.py`** - Configuração centralizada via variáveis de ambiente
-- **`main.py`** - Orquestrador principal do pipeline de integração
+- **`client_adapter.py`** - Operações de leitura/escrita com sistema cliente (arquivos JSON).
+- **`tracos_adapter.py`** - Operações de leitura/escrita com sistema TracOS (MongoDB).
+- **`translator.py`** - Tradução bidirecional de formatos de dados entre sistemas.
+- **`config.py`** - Configuração centralizada via variáveis de ambiente.
+- **`main.py`** - Orquestrador principal do pipeline de integração.
 
 ### Características do Sistema
-- **Assíncrono**: Operações MongoDB não-bloqueantes para melhor performance
-- **Resiliente**: Tratamento robusto de erros de I/O e falhas temporárias de rede
-- **Idempotente**: Operações seguras para retry usando upsert com chaves únicas
-- **Extensível**: Arquitetura modular permite adicionar novos sistemas facilmente
+- **Assíncrono**: Operações MongoDB não-bloqueantes para melhor performance.
+- **Resiliente**: Tratamento robusto de erros de I/O e falhas temporárias de rede.
+- **Idempotente**: Operações seguras para retry usando upsert com chaves únicas.
+- **Extensível**: Arquitetura modular permite adicionar novos sistemas facilmente.
 
 ### Destaques Técnicos Implementados
-- **Padrão Singleton**: Configuração centralizada com carregamento único
-- **Retry com Backoff Exponencial**: Recuperação automática de falhas temporárias (1s → 2s → 4s)
-- **Logging Estruturado**: Logs claros e organizados para debugging
-- **Gestão de Recursos**: Reutilização inteligente de conexões MongoDB e cleanup automático
-- **Validação Rigorosa**: Campos obrigatórios e tipos validados com mensagens de erro específicas
-- **Isolamento de Falhas**: Um arquivo com problema não interrompe o pipeline inteiro
+- **Padrão Singleton**: Configuração centralizada com carregamento único.
+- **Retry com Backoff Exponencial**: Recuperação automática de falhas temporárias (1s → 2s → 4s).
+- **Logging Estruturado**: Logs claros e organizados para debugging.
+- **Gestão de Recursos**: Reutilização inteligente de conexões MongoDB com cleanup.
+- **Validação Rigorosa**: Campos obrigatórios e tipos validados com mensagens de erro específicas.
+- **Isolamento de Falhas**: Um arquivo com problema não interrompe o pipeline inteiro.
 
 ## Como o Sistema Funciona
 
 ### Fluxo Inbound (Cliente → TracOS)
-1. **Leitura**: Processa arquivos JSON da pasta `data/inbound/` (simulando respostas de API do cliente)
-2. **Validação**: Verifica campos obrigatórios (`orderNo`, `summary`, `creationDate`)
-3. **Tradução**: Converte formato do cliente para formato TracOS (ex: status booleanos → enums)
-4. **Persistência**: Salva/atualiza registros no MongoDB com `isSynced=false`
+1. **Leitura**: Processa arquivos JSON da pasta `data/inbound/` (simulando respostas de API do cliente).
+2. **Validação**: Verifica campos obrigatórios (`orderNo`, `summary`, `creationDate`).
+3. **Tradução**: Converte formato do cliente para formato TracOS (ex: status booleanos → enums).
+4. **Persistência**: Salva/atualiza registros no MongoDB com `isSynced=false`.
 
 ### Fluxo Outbound (TracOS → Cliente)
-1. **Consulta**: Busca workorders no MongoDB com `isSynced=false`
-2. **Tradução**: Converte formato TracOS para formato do cliente
-3. **Geração**: Cria arquivos JSON na pasta `data/outbound/` (prontos para "enviar" ao cliente)
-4. **Marcação**: Atualiza registros no MongoDB com `isSynced=true` e timestamp `syncedAt`
+1. **Consulta**: Busca workorders no MongoDB com `isSynced=false`.
+2. **Tradução**: Converte formato TracOS para formato do cliente.
+3. **Geração**: Cria arquivos JSON na pasta `data/outbound/` (prontos para "enviar" ao cliente).
+4. **Marcação**: Atualiza registros no MongoDB com `isSynced=true` e timestamp `syncedAt`.
 
 ### Normalização de Dados
-- **Datas**: Normalizadas para UTC ISO 8601
-- **Status**: Mapeamento entre enums (cliente usa booleanos, TracOS usa strings)
-- **Campos**: Tradução entre diferentes nomenclaturas e estruturas
+- **Datas**: Normalizadas para UTC ISO 8601.
+- **Status**: Mapeamento entre enums (cliente usa booleanos, TracOS usa strings).
+- **Campos**: Tradução entre diferentes nomenclaturas e estruturas.
 
 ### Regra de Negócio Importante
 **Status Padrão para Workorders**: Quando uma workorder do cliente não possui nenhum status ativo (todos os campos booleanos são `false`), o sistema automaticamente aplica `status="pending"` no TracOS. Isso garante que toda workorder tenha um estado válido no sistema.
@@ -163,7 +163,6 @@ docker compose down && docker compose up -d
 # Limpar ambiente e recomeçar
 docker compose down -v
 docker compose up -d
-poetry run python setup.py
 poetry run pytest -v -s
 ```
 
@@ -193,6 +192,8 @@ DATA_OUTBOUND_DIR=./data/outbound
 - Precedência: variáveis exportadas no ambiente > valores do `.env` > defaults do código.
 - Defaults seguros: se não houver export nem `.env`, os valores padrão são usados:
   - `MONGO_URI = mongodb://localhost:27017`
+  - `MONGO_DATABASE=tractian`
+  - `MONGO_COLLECTION=workorders`
   - `DATA_INBOUND_DIR = ./data/inbound`
   - `DATA_OUTBOUND_DIR = ./data/outbound`
 - Observação: valores vazios contam como valor. Evite definir `MONGO_URI=""` por engano.
@@ -204,15 +205,8 @@ DATA_OUTBOUND_DIR=./data/outbound
 - ERROR: falhas não recuperáveis do passo atual (ex.: erro após todas as tentativas de retry).
 Recomendação: use INFO no dia a dia; habilite DEBUG apenas para diagnóstico.
 
-### Decisões de Design (resumo)
-- Configuração centralizada (singleton) carregada uma única vez no processo.
-- Idempotência: upsert por `number` no MongoDB garante reprocessamento seguro.
-- Normalização: datas em UTC ISO 8601; mapeamento de status cliente ↔ TracOS.
-- Regra de status: ausência de flags ativas no cliente implica `status="pending"` no TracOS.
-- Resiliência: retry com backoff exponencial na camada de acesso ao Mongo.
-- Logging enxuto: payloads detalhados apenas em DEBUG; marcos em INFO.
 
-### Checklist de Conformidade (project_requirements)
+### Checklist de Conformidade com requisitos do projeto que constam no project_requirements.md:
 - Inbound (ler, validar, traduzir, upsert em Mongo): PASS
 - Outbound (buscar `isSynced=false`, traduzir, escrever, marcar `isSynced=true` + `syncedAt`): PASS
 - Normalização (datas UTC ISO 8601; enums/status): PASS
