@@ -12,9 +12,9 @@ from loguru import logger
 class TracosAdapter:
     
     def __init__(self):
-        logger.info("Inicializado Classe TracosAdapter...")
+        logger.info("Inicializado TracosAdapter...")
         self._mongo_client: Optional[AsyncIOMotorClient] = None
-        logger.info("Classe TracosAdapter inicializada.")
+        logger.info("TracosAdapter pronto para operações com o banco MongoDB do TracOS.")
 
     
     async def get_mongo_client(self) -> AsyncIOMotorClient:
@@ -75,13 +75,13 @@ class TracosAdapter:
                 doc["_id"] = str(doc["_id"])
                 workorders.append(doc)
             
-            logger.debug(f"{len(workorders)} workorder(s) não sincronizada(s)")
+            logger.info(f"Encontrados {len(workorders)} workorder(s) não sincronizada(s) no TrackOS.")
             return workorders
         
         try:
             return await self._retry_mongo_operation(_read_unsynced_workorders)
         except PyMongoError as e:
-            logger.error(f"Erro ao ler workorders não sincronizadas: {e}")
+            logger.error(f"Erro ao ler workorders não sincronizadas. Detalhes: {e}")
             return []
         
     
@@ -98,16 +98,21 @@ class TracosAdapter:
                 "isSynced": False,
                 "updatedAt": datetime.now(timezone.utc)
             })
+ 
+            logger.debug(f"Workorder com number={workorder_data['number']} marcada como não sincronizada no TrackOS. (isSynced=False)")
             
-            # Upsert: atualiza se existe, insere se não existe
+            # Upsert: atualiza se existe, insere se não existe, removendo syncedAt
             result = await collection.update_one(
                 filter_query,
-                {"$set": workorder_data_copy},
+                {
+                    "$set": workorder_data_copy,
+                    "$unset": {"syncedAt": ""}
+                },
                 upsert=True
             )
-            
+
             action = "inserida" if result.upserted_id else "atualizada"
-            logger.debug(f"Workorder {workorder_data['number']} {action}")
+            logger.debug(f"Workorder com number={workorder_data['number']} foi {action}.")
             return True
         
         try:
@@ -131,10 +136,10 @@ class TracosAdapter:
             )
             
             if result.modified_count > 0:
-                logger.debug(f"Workorder {number} marcada como sincronizada")
+                logger.debug(f"Workorder com number={number} sincronizada no TrackOS. (isSynced=True).")
                 return True
             else:
-                logger.warning(f"Workorder {number} não encontrada")
+                logger.warning(f"Workorder com number={number} não encontrada no TrackOS.")
                 return False
         
         try:
