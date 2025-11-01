@@ -6,7 +6,7 @@ import subprocess
 import asyncio
 import sys
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from config import config
@@ -58,6 +58,10 @@ class IntegrationTestHelper:
         """Compara campos de data com tolerância de 1 segundo."""
         inbound_dt = datetime.fromisoformat(inbound_value.replace('Z', '+00:00'))
         outbound_dt = datetime.fromisoformat(outbound_value.replace('Z', '+00:00'))
+        if inbound_dt.tzinfo is None:
+            inbound_dt = inbound_dt.replace(tzinfo=timezone.utc)
+        if outbound_dt.tzinfo is None:
+            outbound_dt = outbound_dt.replace(tzinfo=timezone.utc)
         
         diff = abs((inbound_dt - outbound_dt).total_seconds())
         assert diff < 1.0, \
