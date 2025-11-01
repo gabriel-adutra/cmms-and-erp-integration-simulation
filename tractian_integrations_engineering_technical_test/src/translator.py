@@ -1,8 +1,8 @@
 """
-Tradutor de dados entre formato Cliente e TracOS.
-Este módulo implementa as regras de negócio para conversão bidirecional
-de dados entre os sistemas Cliente e TracOS, garantindo compliance
-com os schemas e tratamento adequado de casos especiais.
+Data translator between Client and TracOS formats.
+This module implements business rules for bidirectional conversion
+between Client and TracOS systems, ensuring schema compliance and
+proper handling of special cases.
 """
 
 from typing import Dict
@@ -14,7 +14,7 @@ import json
 class DataTranslator:
 
     def __init__(self):
-        logger.info("DataTranslator pronto para conversão de dados (Cliente ↔ TracOS).")
+        logger.info("DataTranslator ready for data conversion (Client ↔ TracOS).")
 
     
     VALID_TRACOS_STATUS = {
@@ -34,23 +34,23 @@ class DataTranslator:
         try:
             normalized_date = date_string.replace("Z", "+00:00")
             parsed_date = datetime.fromisoformat(normalized_date)
-            logger.debug(f"Data parseada com sucesso: {field_name} = {date_string}")
+            logger.debug(f"Successfully parsed date: {field_name} = {date_string}")
             return parsed_date
             
         except (ValueError, AttributeError) as e:
-            logger.error(f"Erro ao parsear data do campo '{field_name}': {date_string} - {e}")
-            raise ValueError(f"Data inválida no campo '{field_name}': {date_string}")
+            logger.error(f"Error parsing date for field '{field_name}': {date_string}. Details: {e}")
+            raise ValueError(f"Invalid date in field '{field_name}': {date_string}")
     
     
     def _determine_tracos_status(self, client_data: Dict) -> str:
-        # Verifica flags em ordem de prioridade
+        # Check flags in priority order
         for client_flag, tracos_status in self.STATUS_PRIORITY_MAP:
             if client_data.get(client_flag, False):
-                logger.debug(f"Status determinado: {client_flag}=True → {tracos_status}")
+                logger.debug(f"Status determined: {client_flag}=True → {tracos_status}")
                 return tracos_status
         
-        # Padrão se nenhum flag estiver True
-        logger.debug("Nenhum status específico encontrado. Usando padrão: pending")
+        # Default if no flag is True
+        logger.debug("No specific status found. Using default: pending")
         return "pending"
     
     
@@ -58,7 +58,7 @@ class DataTranslator:
 
         missing_fields = [field for field in required_fields if field not in data]
         if missing_fields:
-            error_msg = f"Campos obrigatórios ausentes em {data_type}: {', '.join(missing_fields)}"
+            error_msg = f"Missing required fields in {data_type}: {', '.join(missing_fields)}"
             logger.error(error_msg)
             raise KeyError(error_msg)
 
@@ -66,21 +66,21 @@ class DataTranslator:
     def convert_client_to_tracos(self, client_data: Dict) -> Dict:
 
         required_fields = ["orderNo", "summary", "creationDate"]
-        self._validate_required_fields(client_data, required_fields, "dados do cliente")
+        self._validate_required_fields(client_data, required_fields, "client data")
     
         status = self._determine_tracos_status(client_data)
         if status not in self.VALID_TRACOS_STATUS:
-            error_msg = f"Status inválido gerado: {status}"
+            error_msg = f"Invalid status generated: {status}"
             logger.error(error_msg)
             raise ValueError(error_msg)
         
         created_at = self.convert_iso_to_datetime(client_data["creationDate"], "creationDate")
         
-        # Data de atualização: usa lastUpdateDate se disponível, senão creationDate
+        # Update date: use lastUpdateDate if available, otherwise creationDate
         update_date_str = client_data.get("lastUpdateDate", client_data["creationDate"])
         updated_at = self.convert_iso_to_datetime(update_date_str, "lastUpdateDate/creationDate")
         
-        # Construir dados TracOS
+        # Build TracOS data
         tracos_data = {
             "number": client_data["orderNo"],
             "title": client_data["summary"],
@@ -91,13 +91,16 @@ class DataTranslator:
             "deleted": client_data.get("isDeleted", False)
         }
         
-        # Adicionar deletedAt se workorder foi deletada e tem data de deleção
+        # Add deletedAt if the workorder was deleted and has a deletion date
         if client_data.get("isDeleted") and client_data.get("deletedDate"):
             tracos_data["deletedAt"] = self.convert_iso_to_datetime(
                 client_data["deletedDate"], "deletedDate"
             )
 
-        logger.debug(f"Dados do cliente convertidos em dados do TracOS para workorder com orderNo={client_data['orderNo']}:\n{json.dumps({'Dados do cliente': client_data, 'Dados do TracOS': tracos_data}, indent=2, ensure_ascii=False, default=str)}")
+        logger.debug(
+            f"Client data converted to TracOS data for workorder with orderNo={client_data['orderNo']}:\n"
+            f"{json.dumps({'Client data': client_data, 'TracOS data': tracos_data}, indent=2, ensure_ascii=False, default=str)}"
+        )
                 
         return tracos_data
     
@@ -105,23 +108,23 @@ class DataTranslator:
     def convert_tracos_to_client(self, tracos_data: Dict) -> Dict:
         
         required_fields = ["number", "title", "status", "createdAt", "updatedAt"]
-        self._validate_required_fields(tracos_data, required_fields, "dados do TracOS")
+        self._validate_required_fields(tracos_data, required_fields, "TracOS data")
         
         status = tracos_data["status"]
         if status not in self.VALID_TRACOS_STATUS:
-            error_msg = f"Status TracOS inválido: {status}"
+            error_msg = f"Invalid TracOS status: {status}"
             logger.error(error_msg)
             raise ValueError(error_msg)
         
-        # Converter datas para formato ISO string
+        # Convert datetimes to ISO strings
         try:
             creation_date = tracos_data["createdAt"].isoformat()
             update_date = tracos_data["updatedAt"].isoformat()
         except AttributeError as e:
-            logger.error(f"Erro ao converter datas para ISO: {e}")
-            raise ValueError(f"Datas do TracOS devem ser objetos datetime: {e}")
+            logger.error(f"Error converting datetimes to ISO: {e}")
+            raise ValueError(f"TracOS datetimes must be datetime objects: {e}")
         
-        # Construir dados do cliente com flags booleanos baseados no status
+        # Build client data with boolean flags based on TracOS status
         client_data = {
             "orderNo": tracos_data["number"],
             "summary": tracos_data["title"],
@@ -132,7 +135,7 @@ class DataTranslator:
                 tracos_data["deletedAt"].isoformat() 
                 if tracos_data.get("deletedAt") else None
             ),
-            # Flags booleanos baseados no status TracOS
+            # Boolean flags based on TracOS status
             "isDone": status == "completed",
             "isCanceled": status == "cancelled",
             "isOnHold": status == "on_hold",
@@ -140,7 +143,10 @@ class DataTranslator:
             "isActive": status == "in_progress"
         }
         
-        logger.debug(f" Dados do TrackOS convertido em Dados do Cliente para workorder com number={tracos_data['number']}:\n{json.dumps({'Dados do TracOS': tracos_data, 'Dados do Cliente': client_data}, indent=2, ensure_ascii=False, default=str)}")
+        logger.debug(
+            f"TracOS data converted to Client data for workorder with number={tracos_data['number']}:\n"
+            f"{json.dumps({'TracOS data': tracos_data, 'Client data': client_data}, indent=2, ensure_ascii=False, default=str)}"
+        )
         
         return client_data
 
