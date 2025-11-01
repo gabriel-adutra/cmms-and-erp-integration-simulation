@@ -1,5 +1,5 @@
-""" Pipeline principal de integração TracOS ↔ Cliente. 
-Este módulo orquestra o fluxo completo de sincronização bidirecional entre os sistemas Cliente e TracOS. 
+""" Main pipeline for TracOS ↔ Client integration.
+This module orchestrates the end-to-end bidirectional synchronization between Client and TracOS systems.
 """
 
 import asyncio
@@ -11,19 +11,19 @@ from translator import data_translator
 
 
 async def inbound_flow():
-    """ Fluxo inbound: Cliente → TracOS. Lê arquivos JSON do cliente, converte para formato TracOS e salva no MongoDB."""
+    """Inbound flow: Client → TracOS. Reads client JSON files, converts to TracOS format, and saves to MongoDB."""
 
-    logger.info("----------------- Iniciando fluxo inbound (Cliente → TracOS) -----------------")
+    logger.info("----------------- Starting inbound flow (Client → TracOS) -----------------")
     
     files_data = client_adapter.read_inbound_files()
     if not files_data:
         return None
     
-    logger.debug(f"Processando {len(files_data)} workorder(s) encontrados.")
+    logger.debug(f"Processing {len(files_data)} workorder(s) found.")
     for client_data in files_data:
         try:
             if not client_adapter.validate_client_data(client_data):
-                logger.warning(f"Dados inválidos: {client_data.get('orderNo', 'N/A')}")
+                logger.warning(f"Invalid data: {client_data.get('orderNo', 'N/A')}")
                 continue
                 
             tracos_data = data_translator.convert_client_to_tracos(client_data)
@@ -31,19 +31,19 @@ async def inbound_flow():
             await tracos_adapter.upsert_workorder(tracos_data)
             
         except Exception as e:
-            logger.error(f"Erro no processamento: {e}")
+            logger.error(f"Error during processing: {e}")
 
 
 async def outbound_flow():
-    """ Fluxo outbound: TracOS → Cliente. Lê workorders não sincronizadas do MongoDB, converte para formato Cliente e gera arquivos JSON."""
+    """Outbound flow: TracOS → Client. Reads unsynced workorders from MongoDB, converts to Client format, and generates JSON files."""
 
-    logger.info("----------------- Iniciando fluxo outbound (TracOS → Cliente) -----------------")
+    logger.info("----------------- Starting outbound flow (TracOS → Client) -----------------")
     
     workorders = await tracos_adapter.read_unsynced_workorders()
     if not workorders:
         return None
     
-    logger.debug(f"Processando {len(workorders)} workorder(s) encontrados.")
+    logger.debug(f"Processing {len(workorders)} workorder(s) found.")
 
     for tracos_data in workorders:
         try:
@@ -56,22 +56,22 @@ async def outbound_flow():
                 await tracos_adapter.mark_workorder_as_synced(workorder_number)
                 
         except Exception as e:
-            logger.error(f"Erro no processamento: {e}")
+            logger.error(f"Error during processing: {e}")
 
 
 async def main():
     
     try:
-        logger.info("=============== INICIANDO PIPELINE DE INTEGRAÇÃO ===============")
+        logger.info("=============== STARTING INTEGRATION PIPELINE ===============")
 
         await inbound_flow()
         await outbound_flow()
         await tracos_adapter.close_connection()
         
-        logger.info("=============== PIPELINE CONCLUÍDO COM SUCESSO ===============")
+        logger.info("=============== PIPELINE COMPLETED SUCCESSFULLY ===============")
         
     except Exception as e:
-        logger.error(f"Falha crítica na execução do pipeline de integração: {e}", exc_info=True)
+        logger.error(f"Critical failure running the integration pipeline: {e}", exc_info=True)
         await tracos_adapter.close_connection()
         raise
 
