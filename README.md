@@ -12,6 +12,7 @@ The system was designed with a clear separation of responsibilities to make it e
 - `client_adapter.py` - Read/write operations with the client system (JSON files).
 - `tracos_adapter.py` - Read/write operations with the TracOS system (MongoDB).
 - `translator.py` - Bidirectional data translation between systems.
+- `mongoDB.py` - Shared MongoDB service: connection singleton, health check, and retry helpers for adapters. This module centralizes database concerns so any current or future adapters can reuse a single, well-tested access layer.
 - `config.py` - Centralized configuration via environment variables.
 - `main.py` - Main orchestrator of the integration pipeline.
 
@@ -22,12 +23,26 @@ The system was designed with a clear separation of responsibilities to make it e
 - Extensible: Modular architecture enables adding new systems easily.
 
 ### Technical Highlights Implemented
-- Singleton Pattern: Centralized configuration with single load.
-- Exponential Backoff Retry: Automatic recovery from transient failures (1s → 2s → 4s).
+- Configuration Singleton Pattern: Centralized configuration loaded once per process.
+- Simple Mongo Retry: Up to 3 attempts with 1s wait for transient Mongo errors (no exponential backoff).
 - Structured Logging: Clear, organized logs for debugging.
 - Resource Management: Smart reuse of MongoDB connections with cleanup.
 - Strict Validation: Required fields and types validated with specific error messages.
 - Failure Isolation: A problematic file doesn't stop the entire pipeline.
+
+### Design Decisions and Rationale
+- Dedicated `mongoDB.py` module:
+  - Single place for connection lifecycle, health checks, and retry behavior.
+  - Encourages reuse by any adapter that needs MongoDB, reducing duplication and drift.
+  - Makes it simple to evolve cross-cutting DB policies (timeouts, retry rules) without touching business modules.
+- Object-Oriented modules (adapters, translator):
+  - Encapsulation of behavior and state enables easy extension as the application grows.
+  - Clear constructor parameters make new capabilities discoverable (e.g., toggling options, injecting collaborators).
+  - Improved testability via dependency injection and explicit lifecycles.
+  - Future-proofing: when adding new adapters or changing data sources, we can extend classes and pass new parameters rather than rewriting global functions.
+- Dependency Injection in `main.py`:
+  - Instances are created and wired at the composition root (no module-level singletons).
+  - Promotes isolation across runs and prevents import-time side effects.
 
 ## How the System Works
 
@@ -69,6 +84,7 @@ tractian_integrations_engineering_technical_test/
 │   ├── client_adapter.py           # Module for client system operations
 │   ├── tracos_adapter.py           # Module for TracOS system operations
 │   ├── translator.py               # Module for format translation
+│   ├── mongoDB.py                  # Shared MongoDB service (connection, health, retry)
 │   └── config.py                   # Centralized configuration
 └── tests/
     └── test_integration.py         # End-to-end tests
@@ -146,10 +162,12 @@ poetry run pytest -v -s
 ```
 
 ### What the Tests Validate
-- Full pipeline: inbound flow → MongoDB → outbound
-- Correct data translation between Client ↔ TracOS formats
-- Integrity: input data matches the output data
-- Error handling and appropriate logging
+- Full pipeline: inbound flow → MongoDB → outbound.
+- Correct data translation between Client ↔ TracOS formats.
+- Integrity: for existing inbound files, output data matches input (idempotence on business fields).
+- Pre-conditions: test fails fast if inbound directory is empty or MongoDB is down.
+- Sync semantics: validates that only inbound orderNos are marked as `isSynced=true` in Mongo.
+- Pipeline cardinality: the pipeline runs regardless of how many work orders exist in `data/inbound/` (processes all found files).
 
 ## Troubleshooting
 
@@ -204,6 +222,17 @@ DATA_OUTBOUND_DIR=./data/outbound
   - `DATA_OUTBOUND_DIR = ./data/outbound`
 - Note: empty values still count as a value. Avoid accidentally setting `MONGO_URI=""`.
 
+## Architecture and Implementation Checklist
+These are the technical characteristics implemented in this repository.
+- Async I/O with Motor for non-blocking operations.
+- Health check on startup and safe MongoDB client shutdown in `finally`.
+- Simple retry (3 attempts, 1s) for transient MongoDB errors (no exponential backoff).
+- Idempotency via upsert with unique key (work order number).
+- No module-level singletons: dependencies are instantiated and injected in `main`.
+- Structured logs (INFO/DEBUG/WARNING/ERROR) with Loguru.
+- Modular architecture: adapters, translator, and reusable DB service (`mongoDB.py`).
+- Single end-to-end test covering the full pipeline and preconditions (inbound and DB).
+
 ### Logging Policy
 - INFO: processing milestones (pipeline start/end, totals processed, configuration success).
 - DEBUG: details and payloads (e.g., full record contents), useful for local investigation.
@@ -212,7 +241,8 @@ DATA_OUTBOUND_DIR=./data/outbound
 Recommendation: use INFO for day-to-day; enable DEBUG only for diagnostics.
 
 
-### Compliance checklist with project requirements listed in project_requirements.md:
+### Compliance with project_requirements.md
+This section tracks the project's status against the official requirements document (`project_requirements.md`).
 - Inbound (read, validate, translate, upsert to Mongo): PASS
 - Outbound (fetch `isSynced=false`, translate, write, mark `isSynced=true` + `syncedAt`): PASS
 - Normalization (UTC ISO 8601 dates; enums/status): PASS
