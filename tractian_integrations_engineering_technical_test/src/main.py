@@ -6,6 +6,7 @@ import asyncio
 from loguru import logger
 from client_adapter import client_adapter  
 from tracos_adapter import tracos_adapter
+from mongoDB import MongoService
 from translator import data_translator
 
 
@@ -59,20 +60,33 @@ async def outbound_flow():
 
 
 async def main():
-    
+    mongo = None  # defensive: ensure name exists for finally block
+
     try:
         logger.info("=============== STARTING INTEGRATION PIPELINE ===============")
 
+        mongo = MongoService()
+        is_ok = await mongo.health_check()
+        if not is_ok:
+            logger.error("Aborting pipeline: MongoDB is not reachable. Start the database and try again.")
+            return
+
         await inbound_flow()
         await outbound_flow()
-        await tracos_adapter.close_connection()
-        
+
         logger.info("=============== PIPELINE COMPLETED SUCCESSFULLY ===============")
-        
+
     except Exception as e:
         logger.error(f"Critical failure running the integration pipeline: {e}", exc_info=True)
-        await tracos_adapter.close_connection()
         raise
+    
+    finally:
+        # Always attempt to close the Mongo client; never mask the original error
+        if mongo is not None:
+            try:
+                await mongo.close()
+            except Exception:
+                logger.warning("Failed to close Mongo client", exc_info=True)
 
 
 
