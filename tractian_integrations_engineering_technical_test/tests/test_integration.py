@@ -1,6 +1,5 @@
 """End-to-end integration tests for the TracOS ↔ Client system."""
 
-import os
 import json
 import asyncio
 import sys
@@ -10,7 +9,7 @@ from datetime import datetime, timezone
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from config import config
 from main import main
-from tracos_adapter import tracos_adapter
+from tracos_adapter import TracosAdapter
 from mongoDB import MongoService
 
 
@@ -117,7 +116,8 @@ async def validate_data_integrity(inbound_files: list[Path]):
 
 async def validate_sync_status(order_nos: list[int]):
     """Validate that records corresponding to inbound order_nos were marked as isSynced=true."""
-    collection = await tracos_adapter.get_workorders_collection()
+    adapter = TracosAdapter()
+    collection = await adapter.get_workorders_collection()
     
     if not order_nos:
         # Nothing to validate; covered by the earlier assertion of having inbound files

@@ -4,13 +4,13 @@ This module orchestrates the end-to-end bidirectional synchronization between Cl
 
 import asyncio
 from loguru import logger
-from client_adapter import client_adapter  
-from tracos_adapter import tracos_adapter
+from client_adapter import ClientAdapter  
+from tracos_adapter import TracosAdapter
 from mongoDB import MongoService
-from translator import data_translator
+from translator import DataTranslator
 
 
-async def inbound_flow():
+async def inbound_flow(client_adapter: ClientAdapter, tracos_adapter: TracosAdapter, translator: DataTranslator):
     """Inbound flow: Client → TracOS. Reads client JSON files, converts to TracOS format, and saves to MongoDB."""
 
     logger.info("----------------- Starting inbound flow (Client → TracOS) -----------------")
@@ -26,7 +26,7 @@ async def inbound_flow():
                 logger.warning(f"Invalid data: {client_data.get('orderNo', 'N/A')}")
                 continue
                 
-            tracos_data = data_translator.convert_client_to_tracos(client_data)
+            tracos_data = translator.convert_client_to_tracos(client_data)
             
             await tracos_adapter.upsert_workorder(tracos_data)
             
@@ -34,7 +34,7 @@ async def inbound_flow():
             logger.error(f"Error during processing: {e}")
 
 
-async def outbound_flow():
+async def outbound_flow(client_adapter: ClientAdapter, tracos_adapter: TracosAdapter, translator: DataTranslator):
     """Outbound flow: TracOS → Client. Reads unsynced workorders from MongoDB, converts to Client format, and generates JSON files."""
 
     logger.info("----------------- Starting outbound flow (TracOS → Client) -----------------")
@@ -47,7 +47,7 @@ async def outbound_flow():
 
     for tracos_data in workorders:
         try:
-            client_data = data_translator.convert_tracos_to_client(tracos_data)
+            client_data = translator.convert_tracos_to_client(tracos_data)
 
             workorder_number = tracos_data['number']
             filename = f"workorder_{workorder_number}.json"
@@ -71,8 +71,12 @@ async def main():
             logger.error("Aborting pipeline: MongoDB is not reachable. Start the database and try again.")
             return
 
-        await inbound_flow()
-        await outbound_flow()
+        client_adapter = ClientAdapter()
+        tracos_adapter = TracosAdapter()
+        translator = DataTranslator()
+
+        await inbound_flow(client_adapter, tracos_adapter, translator)
+        await outbound_flow(client_adapter, tracos_adapter, translator)
 
         logger.info("=============== PIPELINE COMPLETED SUCCESSFULLY ===============")
 

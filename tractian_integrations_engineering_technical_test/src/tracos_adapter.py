@@ -103,11 +103,3 @@ class TracosAdapter:
         except PyMongoError as e:
             logger.error(f"Error marking workorder {number} as synced: {e}")
             return False
-        
-            
-
-
-
-
-tracos_adapter = TracosAdapter()
-

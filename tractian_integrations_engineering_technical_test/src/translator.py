@@ -158,7 +158,5 @@ class DataTranslator:
         
         return client_data
 
-
-
-data_translator = DataTranslator()
+ 
 

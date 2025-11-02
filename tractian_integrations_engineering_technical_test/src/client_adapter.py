@@ -96,7 +96,3 @@ class ClientAdapter:
         logger.info(f"Data is valid for workorder with orderNo={data.get('orderNo')}.")
         return True
 
-
-
-client_adapter = ClientAdapter()
-
