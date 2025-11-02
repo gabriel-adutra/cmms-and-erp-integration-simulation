@@ -24,8 +24,6 @@ The system was designed with a clear separation of responsibilities to make it e
 
 ### Technical Highlights Implemented
 - Configuration Singleton Pattern: Centralized configuration loaded once per process.
-- Simple Mongo Retry: Up to 3 attempts with 1s wait for transient Mongo errors (no exponential backoff).
-- Structured Logging: Clear, organized logs for debugging.
 - Resource Management: Smart reuse of MongoDB connections with cleanup.
 - Strict Validation: Required fields and types validated with specific error messages.
 - Failure Isolation: A problematic file doesn't stop the entire pipeline.
@@ -226,7 +224,7 @@ DATA_OUTBOUND_DIR=./data/outbound
 These are the technical characteristics implemented in this repository.
 - Async I/O with Motor for non-blocking operations.
 - Health check on startup and safe MongoDB client shutdown in `finally`.
-- Simple retry (3 attempts, 1s) for transient MongoDB errors (no exponential backoff).
+- Simple retry (3 attempts, 1s) for transient MongoDB errors.
 - Idempotency via upsert with unique key (work order number).
 - No module-level singletons: dependencies are instantiated and injected in `main`.
 - Structured logs (INFO/DEBUG/WARNING/ERROR) with Loguru.
