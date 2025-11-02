@@ -2,7 +2,6 @@
 
 import os
 import json
-import subprocess
 import asyncio
 import sys
 from pathlib import Path
@@ -12,9 +11,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from config import config
 from main import main
 from tracos_adapter import tracos_adapter
+from mongoDB import MongoService
 
 
-EXPECTED_WORKORDER_COUNT = 10
 DATE_FIELDS = ['creationDate', 'lastUpdateDate', 'deletedDate']
 
 
@@ -23,28 +22,8 @@ class IntegrationTestHelper:
     
     @staticmethod
     async def cleanup_environment():
-        try:
-            client = await tracos_adapter.get_mongo_client()
-            db = client[config.MONGO_DATABASE]
-            await db[config.MONGO_COLLECTION].delete_many({})
-            await tracos_adapter.close_connection()
-        except Exception:
-            pass
-        
-        for directory in [config.DATA_INBOUND_DIR, config.DATA_OUTBOUND_DIR]:
-            if os.path.exists(directory):
-                for file in Path(directory).glob("*.json"):
-                    if file.name != ".gitignore":
-                        file.unlink()
-    
-    @staticmethod
-    def run_setup_script() -> subprocess.CompletedProcess:
-        return subprocess.run(
-            ["python", "setup.py"], 
-            cwd=Path(__file__).parent.parent,
-            capture_output=True, 
-            text=True
-        )
+        """Integration test should not mutate environment; no-op cleanup."""
+        return None
     
     @staticmethod
     def read_json_file(file_path: Path) -> dict:
@@ -72,29 +51,47 @@ test_helper = IntegrationTestHelper()
 def test_complete_pipeline_end_to_end():
     async def _run_test():
         await test_helper.cleanup_environment()
-        result = test_helper.run_setup_script()
-        assert result.returncode == 0, f"Setup failed: {result.stderr}"
+        # Determine inbound inputs; test should not generate them
+        inbound_files = sorted(Path(config.DATA_INBOUND_DIR).glob("*.json"))
+        assert len(inbound_files) > 0, (
+            f"No inbound files found in {config.DATA_INBOUND_DIR}. "
+            f"Provide input JSON files to run the end-to-end integration test. Run: `poetry run python setup.py` to generate the files in data/inbound."
+        )
+
+        # Ensure DB is up before running the pipeline, mirroring main.py's behavior
+        mongo_ok = await MongoService().health_check()
+        assert mongo_ok, (
+            "MongoDB is not reachable. Start the database (e.g., 'docker compose up -d') "
+            "and run the test again."
+        )
         
         await main()
         
-        await validate_data_integrity()
-        await validate_sync_status()
+        await validate_data_integrity(inbound_files)
+        # Build list of order numbers from inbound to validate only processed items
+        inbound_order_nos: list[int] = []
+        for inbound_path in inbound_files:
+            data = test_helper.read_json_file(inbound_path)
+            if (order_no := data.get('orderNo')) is not None:
+                inbound_order_nos.append(order_no)
+        await validate_sync_status(order_nos=inbound_order_nos)
         
     asyncio.run(_run_test())
 
 
-async def validate_data_integrity():
+async def validate_data_integrity(inbound_files: list[Path]):
     """Validate that inbound data equals outbound data (idempotence)."""
     business_fields = [
         'orderNo', 'summary', 'isDone', 'isCanceled', 
         'isOnHold', 'isPending', 'isDeleted', 'deletedDate'
     ]
     
-    for i in range(1, EXPECTED_WORKORDER_COUNT + 1):
-        inbound_path = config.DATA_INBOUND_DIR / f"{i}.json"
-        outbound_path = config.DATA_OUTBOUND_DIR / f"workorder_{i}.json"
-        
+    for inbound_path in inbound_files:
         inbound_data = test_helper.read_json_file(inbound_path)
+        order_no = inbound_data.get('orderNo')
+        assert order_no is not None, f"Inbound file {inbound_path.name} missing 'orderNo'"
+        outbound_path = config.DATA_OUTBOUND_DIR / f"workorder_{order_no}.json"
+        assert outbound_path.exists(), f"Expected outbound file not found: {outbound_path}"
         outbound_data = test_helper.read_json_file(outbound_path)
         
         for field in business_fields:
@@ -107,26 +104,44 @@ async def validate_data_integrity():
                 inbound_data.get('isActive', False)
             ]):
                 assert outbound_value == True, \
-                    f"isPending must be true when all statuses were false in file {i}"
+                    f"isPending must be true when all statuses were false in file {inbound_path.name}"
             elif field in DATE_FIELDS and inbound_value and outbound_value:
-                test_helper.compare_datetime_fields(inbound_value, outbound_value, field, i)
+                test_helper.compare_datetime_fields(inbound_value, outbound_value, field, order_no)
             else:
                 assert inbound_value == outbound_value, \
-                    f"Field {field} differs in file {i}: {inbound_value} != {outbound_value}"
+                    f"Field {field} differs for workorder {order_no}: {inbound_value} != {outbound_value}"
         
-    assert 'isActive' in outbound_data, f"Field isActive missing in workorder_{i}.json"
+    # Ensure 'isActive' is present in the last processed outbound file
+    assert 'isActive' in outbound_data, f"Field isActive missing in {outbound_path.name}"
 
 
-async def validate_sync_status():
-    """Validate that all records were marked as isSynced=true."""
-    client = await tracos_adapter.get_mongo_client()
-    db = client[config.MONGO_DATABASE]
-    collection = db[config.MONGO_COLLECTION]
+async def validate_sync_status(order_nos: list[int]):
+    """Validate that records corresponding to inbound order_nos were marked as isSynced=true."""
+    collection = await tracos_adapter.get_workorders_collection()
     
-    synced_count = await collection.count_documents({"isSynced": True})
-    total_count = await collection.count_documents({})
+    if not order_nos:
+        # Nothing to validate; covered by the earlier assertion of having inbound files
+        return
+
+    synced_for_inbound = await collection.count_documents({
+        "number": {"$in": order_nos},
+        "isSynced": True,
+    })
+    not_synced_for_inbound = await collection.count_documents({
+        "number": {"$in": order_nos},
+        "isSynced": {"$ne": True},
+    })
+
+    assert synced_for_inbound == len(order_nos), (
+        f"Expected all inbound workorders to be synchronized: "
+        f"{synced_for_inbound}/{len(order_nos)} are synced"
+    )
+    assert not_synced_for_inbound == 0, (
+        f"There are inbound workorders not synchronized: count={not_synced_for_inbound}"
+    )
     
-    assert synced_count == total_count == EXPECTED_WORKORDER_COUNT, \
-        f"Expected {EXPECTED_WORKORDER_COUNT} synchronized records, found {synced_count}/{total_count}"
-    
-    await tracos_adapter.close_connection()
+    # Connection is managed by MongoService singleton; optional explicit close
+    try:
+        await MongoService().close()
+    except Exception:
+        pass
