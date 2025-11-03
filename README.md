@@ -65,18 +65,20 @@ The system was designed with a clear separation of responsibilities to make it e
 
 The system handles all possible client status combinations with the following priority-based mapping:
 
-| Client Status | Client Flags | TracOS Status | TracOS → Client |
+| Client Status | Client Flags | TracOS Fields | TracOS → Client |
 |---------------|--------------|---------------|-----------------|
-| **Deleted** | `isDeleted: true` | `"deleted"` | `isDeleted: true`, others `false` |
-| **Completed** | `isDone: true` | `"completed"` | `isDone: true`, others `false` |
-| **Cancelled** | `isCanceled: true` | `"cancelled"` | `isCanceled: true`, others `false` |
-| **On Hold** | `isOnHold: true` | `"on_hold"` | `isOnHold: true`, others `false` |
-| **In Progress** | All flags `false` | `"in_progress"` | `isActive: true`, others `false` |
-| **Pending** | `isPending: true` | `"pending"` | `isPending: true`, others `false` |
+| **Deleted** | `isDeleted: true` | `status: "deleted"` + `deleted: true` | `isDeleted: true`, others `false` |
+| **Completed** | `isDone: true` | `status: "completed"` | `isDone: true`, others `false` |
+| **Cancelled** | `isCanceled: true` | `status: "cancelled"` | `isCanceled: true`, others `false` |
+| **On Hold** | `isOnHold: true` | `status: "on_hold"` | `isOnHold: true`, others `false` |
+| **In Progress** | All flags `false` | `status: "in_progress"` | `isActive: true`, others `false` |
+| **Pending** | `isPending: true` | `status: "pending"` | `isPending: true`, others `false` |
 
 **Priority Order**: The system checks flags in the order listed above. The first `true` flag determines the status.
 
-**Special Case**: When all boolean fields are `false`, the system maps to `"in_progress"` since the client system doesn't have an `isActive` field to represent this state explicitly.
+**Special Cases**: 
+- **Deleted Status**: When `isDeleted: true`, TracOS stores both `status: "deleted"` AND `deleted: true`. This dual mapping ensures proper handling of deletion semantics in both systems.
+- **In Progress**: When all boolean fields are `false`, the system maps to `"in_progress"` since the client system doesn't have an `isActive` field to represent this state explicitly.
 
 ## Project Structure
 
