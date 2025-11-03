@@ -71,7 +71,7 @@ The system handles all possible client status combinations with the following pr
 | **Completed** | `isDone: true` | `status: "completed"` | All status flags returned: `isDone: true`, others `false` |
 | **Cancelled** | `isCanceled: true` | `status: "cancelled"` | All status flags returned: `isCanceled: true`, others `false` |
 | **On Hold** | `isOnHold: true` | `status: "on_hold"` | All status flags returned: `isOnHold: true`, others `false` |
-| **In Progress** | All flags `false` | `status: "in_progress"` | All status flags returned: all `false` |
+| **In Progress** | All status flags `false` | `status: "in_progress"` | All status flags returned: all `false` |
 | **Pending** | `isPending: true` | `status: "pending"` | All status flags returned: `isPending: true`, others `false` |
 
 **Priority Order**: The system checks flags in the order listed above. The first `true` flag determines the status.
