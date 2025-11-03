@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-from config import config
+from config import Config
 from main import main
 from tracos_adapter import TracosAdapter
 from mongoDB import MongoService
@@ -48,6 +48,8 @@ test_helper = IntegrationTestHelper()
 
 
 def test_complete_pipeline_end_to_end():
+    config = Config()
+    
     async def _run_test():
         await test_helper.cleanup_environment()
         # Determine inbound inputs; test should not generate them
@@ -66,7 +68,7 @@ def test_complete_pipeline_end_to_end():
         
         await main()
         
-        await validate_data_integrity(inbound_files)
+        await validate_data_integrity(inbound_files, config)
         # Build list of order numbers from inbound to validate only processed items
         inbound_order_nos: list[int] = []
         for inbound_path in inbound_files:
@@ -78,7 +80,7 @@ def test_complete_pipeline_end_to_end():
     asyncio.run(_run_test())
 
 
-async def validate_data_integrity(inbound_files: list[Path]):
+async def validate_data_integrity(inbound_files: list[Path], config: Config):
     """Validate that inbound data equals outbound data (idempotence)."""
     business_fields = [
         'orderNo', 'summary', 'isDone', 'isCanceled', 

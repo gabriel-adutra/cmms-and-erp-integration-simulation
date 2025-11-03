@@ -2,7 +2,7 @@
 from typing import List, Dict
 from datetime import datetime, timezone
 from pymongo.errors import (PyMongoError)
-from config import config
+from config import Config
 from loguru import logger
 from mongoDB import MongoService
 
@@ -12,10 +12,11 @@ class TracosAdapter:
     def __init__(self):
         logger.info("TracosAdapter initialized...")
         self._mongo = MongoService()
+        self._config = Config()
         logger.info("TracosAdapter ready for operations with TracOS MongoDB.")
 
     async def get_workorders_collection(self):
-        return await self._mongo.get_collection(config.MONGO_COLLECTION)
+        return await self._mongo.get_collection(self._config.MONGO_COLLECTION)
             
     
     async def read_unsynced_workorders(self) -> List[Dict]:

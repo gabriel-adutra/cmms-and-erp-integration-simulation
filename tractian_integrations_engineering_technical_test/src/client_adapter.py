@@ -5,7 +5,7 @@ import json
 from typing import List, Dict, Optional
 from pathlib import Path
 from json import JSONDecodeError
-from config import config
+from config import Config
 from loguru import logger
 
 
@@ -13,6 +13,7 @@ class ClientAdapter:
 
     def __init__(self):
         logger.info("ClientAdapter initialized...")
+        config = Config()
         self.inbound_dir = config.DATA_INBOUND_DIR
         self.outbound_dir = config.DATA_OUTBOUND_DIR
         logger.info("ClientAdapter ready to manage client JSON files.")

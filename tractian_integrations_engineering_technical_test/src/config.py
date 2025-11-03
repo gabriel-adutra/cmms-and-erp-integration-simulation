@@ -30,6 +30,3 @@ class Config:
         
         self._initialized = True
         logger.info("Configuration initialized successfully.")
-
-
-config = Config()

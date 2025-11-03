@@ -17,7 +17,7 @@ from pymongo.errors import (
     ExecutionTimeout,
     WTimeoutError,
 )
-from config import config
+from config import Config
 from loguru import logger
 
 # Intrinsic timeouts (ms) defined as code constants
@@ -42,6 +42,7 @@ class MongoService:
     _client: Optional[AsyncIOMotorClient] = None  # per-process singleton
 
     def __init__(self, uri: Optional[str] = None, database: Optional[str] = None):
+        config = Config()
         self._uri = uri or config.MONGO_URI
         self._database = database or config.MONGO_DATABASE
 
