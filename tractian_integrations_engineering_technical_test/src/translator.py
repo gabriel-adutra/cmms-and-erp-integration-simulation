@@ -139,12 +139,11 @@ class DataTranslator:
             "summary": tracos_data["title"],
             "creationDate": creation_date,
             "lastUpdateDate": update_date,
-            "isDeleted": tracos_data.get("deleted", False),
             "deletedDate": (
                 tracos_data["deletedAt"].isoformat() 
                 if tracos_data.get("deletedAt") else None
             ),
-            # Boolean flags based on TracOS status
+            # Boolean flags based on TracOS status (priority: status > deleted field)
             "isDone": status == "completed",
             "isCanceled": status == "cancelled",
             "isOnHold": status == "on_hold",

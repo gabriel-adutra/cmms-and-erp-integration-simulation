@@ -99,13 +99,13 @@ async def validate_data_integrity(inbound_files: list[Path], config: Config):
             inbound_value = inbound_data.get(field)
             outbound_value = outbound_data.get(field)
             
-            if field == 'isPending' and not any([
+            if field == 'isActive' and not any([
                 inbound_data.get('isDone'), inbound_data.get('isCanceled'),
                 inbound_data.get('isOnHold'), inbound_data.get('isPending'),
-                inbound_data.get('isActive', False)
+                inbound_data.get('isDeleted'), inbound_data.get('isActive', False)
             ]):
                 assert outbound_value == True, \
-                    f"isPending must be true when all statuses were false in file {inbound_path.name}"
+                    f"isActive must be true when all statuses were false in file {inbound_path.name}"
             elif field in DATE_FIELDS and inbound_value and outbound_value:
                 test_helper.compare_datetime_fields(inbound_value, outbound_value, field, order_no)
             else:
