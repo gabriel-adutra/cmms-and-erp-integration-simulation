@@ -89,7 +89,12 @@ class DataTranslator:
             "description": f"{client_data['summary']} description",
             "createdAt": created_at,
             "updatedAt": updated_at,
-            "deleted": client_data.get("isDeleted", False)
+            "deleted": client_data.get("isDeleted", False),
+            # Track which optional status fields the client originally sent
+            "original_client_fields": [
+                field for field in client_data.keys() 
+                if field in ["isDone", "isCanceled", "isOnHold", "isPending", "isDeleted", "isActive"]
+            ]
         }
         
         # Add deletedAt if the workorder was deleted and has a deletion date
@@ -143,14 +148,18 @@ class DataTranslator:
                 tracos_data["deletedAt"].isoformat() 
                 if tracos_data.get("deletedAt") else None
             ),
-            # Boolean flags based on TracOS status - return as client sent them
+            # Boolean flags - always return the 5 basic fields (client always sends them)
             "isDone": status == "completed",
             "isCanceled": status == "cancelled",
             "isOnHold": status == "on_hold",
             "isPending": status == "pending",
             "isDeleted": status == "deleted"
-            # Note: isActive is not returned - client never sends it, so we don't return it
         }
+        
+        # Add isActive ONLY if client originally sent it
+        original_fields = tracos_data.get("original_client_fields", [])
+        if "isActive" in original_fields:
+            client_data["isActive"] = (status == "in_progress")
         
         logger.debug(
             f"TracOS data converted to Client data for workorder with number={tracos_data['number']}:\n"

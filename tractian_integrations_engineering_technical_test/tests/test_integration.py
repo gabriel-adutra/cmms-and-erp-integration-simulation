@@ -81,7 +81,7 @@ def test_complete_pipeline_end_to_end():
 
 
 async def validate_data_integrity(inbound_files: list[Path], config: Config):
-    """Validate that inbound data equals outbound data (idempotence)."""
+    """Validate that inbound data equals outbound data (idempotence) and perfect field symmetry."""
     business_fields = [
         'orderNo', 'summary', 'isDone', 'isCanceled', 
         'isOnHold', 'isPending', 'isDeleted', 'deletedDate'
@@ -95,6 +95,7 @@ async def validate_data_integrity(inbound_files: list[Path], config: Config):
         assert outbound_path.exists(), f"Expected outbound file not found: {outbound_path}"
         outbound_data = test_helper.read_json_file(outbound_path)
         
+        # Validate core business fields (always present)
         for field in business_fields:
             inbound_value = inbound_data.get(field)
             outbound_value = outbound_data.get(field)
@@ -104,6 +105,21 @@ async def validate_data_integrity(inbound_files: list[Path], config: Config):
             else:
                 assert inbound_value == outbound_value, \
                     f"Field {field} differs for workorder {order_no}: {inbound_value} != {outbound_value}"
+        
+        # Validate perfect field symmetry for isActive field
+        inbound_has_isactive = 'isActive' in inbound_data
+        outbound_has_isactive = 'isActive' in outbound_data
+        
+        if inbound_has_isactive:
+            # Client sent isActive → must be returned
+            assert outbound_has_isactive, \
+                f"Workorder {order_no}: Client sent isActive but didn't receive it back"
+            assert inbound_data['isActive'] == outbound_data['isActive'], \
+                f"Workorder {order_no}: isActive value differs: {inbound_data['isActive']} != {outbound_data['isActive']}"
+        else:
+            # Client didn't send isActive → must NOT be returned
+            assert not outbound_has_isactive, \
+                f"Workorder {order_no}: Client didn't send isActive but received it back"
 
 
 async def validate_sync_status(order_nos: list[int]):

@@ -67,19 +67,21 @@ The system handles all possible client status combinations with the following pr
 
 | Client Status | Client Flags | TracOS Fields | TracOS → Client |
 |---------------|--------------|---------------|-----------------|
-| **Deleted** | `isDeleted: true` | `status: "deleted"` + `deleted: true` | `isDeleted: true`, others `false` |
-| **Completed** | `isDone: true` | `status: "completed"` | `isDone: true`, others `false` |
-| **Cancelled** | `isCanceled: true` | `status: "cancelled"` | `isCanceled: true`, others `false` |
-| **On Hold** | `isOnHold: true` | `status: "on_hold"` | `isOnHold: true`, others `false` |
-| **In Progress** | All flags `false` | `status: "in_progress"` | All flags `false` (as sent) |
-| **Pending** | `isPending: true` | `status: "pending"` | `isPending: true`, others `false` |
+| **Deleted** | `isDeleted: true` | `status: "deleted"` + `deleted: true` | All status flags returned: `isDeleted: true`, others `false` |
+| **Completed** | `isDone: true` | `status: "completed"` | All status flags returned: `isDone: true`, others `false` |
+| **Cancelled** | `isCanceled: true` | `status: "cancelled"` | All status flags returned: `isCanceled: true`, others `false` |
+| **On Hold** | `isOnHold: true` | `status: "on_hold"` | All status flags returned: `isOnHold: true`, others `false` |
+| **In Progress** | All flags `false` OR `isActive: true` | `status: "in_progress"` | All status flags returned: all `false` (as sent), `isActive` only if originally sent |
+| **Pending** | `isPending: true` | `status: "pending"` | All status flags returned: `isPending: true`, others `false` |
 
 **Priority Order**: The system checks flags in the order listed above. The first `true` flag determines the status.
 
 **Special Cases**: 
 - **Deleted Status**: When `isDeleted: true`, TracOS stores both `status: "deleted"` AND `deleted: true`. This dual mapping ensures proper handling of deletion semantics in both systems.
-- **In Progress**: When all boolean fields are `false`, TracOS internally maps to `"in_progress"` but returns the data exactly as the client sent it (all flags `false`). This maintains input-output symmetry and avoids introducing fields the client never provided.
-- **Field Symmetry**: The system implements strict input-output symmetry - only fields sent by the client are returned in the response, preventing dependencies on calculated fields not present in the original client data.
+- **isActive Field**: The `isActive` field is optional and treated with special handling. When `isActive: true` and all other status flags are `false`, TracOS maps to `"in_progress"` status. However, `isActive` is only returned to the client if they originally sent it.
+- **Perfect Field Symmetry**: The system implements perfect input-output symmetry. The client receives back exactly the same fields they originally sent:
+  - **Always returned**: The 5 core status fields (`isDone`, `isCanceled`, `isOnHold`, `isPending`, `isDeleted`) are always returned as they represent the client's standard data model.
+  - **Conditionally returned**: The `isActive` field is returned **only if** the client originally included it in their request, maintaining perfect field symmetry and preventing dependencies on fields the client never provided.
 
 ## Project Structure
 
@@ -305,13 +307,12 @@ This section tracks the project's status against the official requirements docum
   "summary": "Example workorder #1",
   "creationDate": "2025-09-30T23:04:29.045000+00:00",
   "lastUpdateDate": "2025-10-29T23:04:29.685000+00:00",
-  "isDeleted": false,
   "deletedDate": null,
   "isDone": false,
   "isCanceled": true,
   "isOnHold": false,
   "isPending": false,
-  "isActive": false
+  "isDeleted": false
 }
 ```
 
