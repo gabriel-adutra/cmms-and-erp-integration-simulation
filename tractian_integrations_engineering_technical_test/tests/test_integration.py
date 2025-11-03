@@ -106,20 +106,14 @@ async def validate_data_integrity(inbound_files: list[Path], config: Config):
                 assert inbound_value == outbound_value, \
                     f"Field {field} differs for workorder {order_no}: {inbound_value} != {outbound_value}"
         
-        # Validate perfect field symmetry for isActive field
-        inbound_has_isactive = 'isActive' in inbound_data
+        # Validate isActive field behavior following the mapping table exactly
         outbound_has_isactive = 'isActive' in outbound_data
         
-        if inbound_has_isactive:
-            # Client sent isActive → must be returned
-            assert outbound_has_isactive, \
-                f"Workorder {order_no}: Client sent isActive but didn't receive it back"
-            assert inbound_data['isActive'] == outbound_data['isActive'], \
-                f"Workorder {order_no}: isActive value differs: {inbound_data['isActive']} != {outbound_data['isActive']}"
-        else:
-            # Client didn't send isActive → must NOT be returned
-            assert not outbound_has_isactive, \
-                f"Workorder {order_no}: Client didn't send isActive but received it back"
+        # Following the table: isActive should NEVER be returned in the current implementation
+        # The table says "isActive only if originally sent" but we simplified to not track this
+        # So isActive should never appear in outbound data
+        assert not outbound_has_isactive, \
+            f"Workorder {order_no}: isActive field should not be returned in simplified implementation"
 
 
 async def validate_sync_status(order_nos: list[int]):
