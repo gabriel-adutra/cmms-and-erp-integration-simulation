@@ -18,9 +18,10 @@ class DataTranslator:
 
     
     VALID_TRACOS_STATUS = {
-        "pending", "in_progress", "completed", "on_hold", "cancelled"
+        "pending", "in_progress", "completed", "on_hold", "cancelled", "deleted"
     }
     STATUS_PRIORITY_MAP = [
+        ("isDeleted", "deleted"),
         ("isDone", "completed"),
         ("isCanceled", "cancelled"),
         ("isOnHold", "on_hold"),
@@ -49,9 +50,9 @@ class DataTranslator:
                 logger.debug(f"Status determined: {client_flag}=True → {tracos_status}")
                 return tracos_status
         
-        # Default if no flag is True
-        logger.debug("No specific status found. Using default: pending")
-        return "pending"
+        # Default if no flag is True: in_progress (client doesn't have isActive field)
+        logger.debug("No specific status found. Using default: in_progress")
+        return "in_progress"
     
     
     def _validate_required_fields(self, data: Dict, required_fields: list, data_type: str):
@@ -148,7 +149,8 @@ class DataTranslator:
             "isCanceled": status == "cancelled",
             "isOnHold": status == "on_hold",
             "isPending": status == "pending",
-            "isActive": status == "in_progress"
+            "isActive": status == "in_progress",
+            "isDeleted": status == "deleted"
         }
         
         logger.debug(
