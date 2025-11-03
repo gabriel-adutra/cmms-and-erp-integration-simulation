@@ -61,10 +61,22 @@ The system was designed with a clear separation of responsibilities to make it e
 - Status: Mapping between enums (client uses booleans, TracOS uses strings).
 - Fields: Translation between different names and structures.
 
-### Important Business Rule
-Default Status for Work Orders: When a client work order has no active status (all boolean fields are `false`), the system automatically applies `status="pending"` in TracOS. This ensures every work order has a valid state in the system.
+### Status Mapping Business Rules
 
-Example: Client sends `isPending: false, isDone: false, isCanceled: false, isOnHold: false` → System applies `"pending"` → Returns `isPending: true` on the sync back.
+The system handles all possible client status combinations with the following priority-based mapping:
+
+| Client Status | Client Flags | TracOS Status | TracOS → Client |
+|---------------|--------------|---------------|-----------------|
+| **Deleted** | `isDeleted: true` | `"deleted"` | `isDeleted: true`, others `false` |
+| **Completed** | `isDone: true` | `"completed"` | `isDone: true`, others `false` |
+| **Cancelled** | `isCanceled: true` | `"cancelled"` | `isCanceled: true`, others `false` |
+| **On Hold** | `isOnHold: true` | `"on_hold"` | `isOnHold: true`, others `false` |
+| **In Progress** | All flags `false` | `"in_progress"` | `isActive: true`, others `false` |
+| **Pending** | `isPending: true` | `"pending"` | `isPending: true`, others `false` |
+
+**Priority Order**: The system checks flags in the order listed above. The first `true` flag determines the status.
+
+**Special Case**: When all boolean fields are `false`, the system maps to `"in_progress"` since the client system doesn't have an `isActive` field to represent this state explicitly.
 
 ## Project Structure
 
