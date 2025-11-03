@@ -143,13 +143,13 @@ class DataTranslator:
                 tracos_data["deletedAt"].isoformat() 
                 if tracos_data.get("deletedAt") else None
             ),
-            # Boolean flags based on TracOS status (priority: status > deleted field)
+            # Boolean flags based on TracOS status - return as client sent them
             "isDone": status == "completed",
             "isCanceled": status == "cancelled",
             "isOnHold": status == "on_hold",
             "isPending": status == "pending",
-            "isActive": status == "in_progress",
             "isDeleted": status == "deleted"
+            # Note: isActive is not returned - client never sends it, so we don't return it
         }
         
         logger.debug(

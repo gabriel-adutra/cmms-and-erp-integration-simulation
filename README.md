@@ -71,14 +71,15 @@ The system handles all possible client status combinations with the following pr
 | **Completed** | `isDone: true` | `status: "completed"` | `isDone: true`, others `false` |
 | **Cancelled** | `isCanceled: true` | `status: "cancelled"` | `isCanceled: true`, others `false` |
 | **On Hold** | `isOnHold: true` | `status: "on_hold"` | `isOnHold: true`, others `false` |
-| **In Progress** | All flags `false` | `status: "in_progress"` | `isActive: true`, others `false` |
+| **In Progress** | All flags `false` | `status: "in_progress"` | All flags `false` (as sent) |
 | **Pending** | `isPending: true` | `status: "pending"` | `isPending: true`, others `false` |
 
 **Priority Order**: The system checks flags in the order listed above. The first `true` flag determines the status.
 
 **Special Cases**: 
 - **Deleted Status**: When `isDeleted: true`, TracOS stores both `status: "deleted"` AND `deleted: true`. This dual mapping ensures proper handling of deletion semantics in both systems.
-- **In Progress**: When all boolean fields are `false`, the system maps to `"in_progress"` since the client system doesn't have an `isActive` field to represent this state explicitly.
+- **In Progress**: When all boolean fields are `false`, TracOS internally maps to `"in_progress"` but returns the data exactly as the client sent it (all flags `false`). This maintains input-output symmetry and avoids introducing fields the client never provided.
+- **Field Symmetry**: The system implements strict input-output symmetry - only fields sent by the client are returned in the response, preventing dependencies on calculated fields not present in the original client data.
 
 ## Project Structure
 
