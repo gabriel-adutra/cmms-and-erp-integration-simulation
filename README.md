@@ -71,17 +71,14 @@ The system handles all possible client status combinations with the following pr
 | **Completed** | `isDone: true` | `status: "completed"` | All status flags returned: `isDone: true`, others `false` |
 | **Cancelled** | `isCanceled: true` | `status: "cancelled"` | All status flags returned: `isCanceled: true`, others `false` |
 | **On Hold** | `isOnHold: true` | `status: "on_hold"` | All status flags returned: `isOnHold: true`, others `false` |
-| **In Progress** | All flags `false` OR `isActive: true` | `status: "in_progress"` | All status flags returned: all `false` (as sent), `isActive` only if originally sent |
+| **In Progress** | All flags `false` | `status: "in_progress"` | All status flags returned: all `false` |
 | **Pending** | `isPending: true` | `status: "pending"` | All status flags returned: `isPending: true`, others `false` |
 
 **Priority Order**: The system checks flags in the order listed above. The first `true` flag determines the status.
 
 **Special Cases**: 
 - **Deleted Status**: When `isDeleted: true`, TracOS stores both `status: "deleted"` AND `deleted: true`. This dual mapping ensures proper handling of deletion semantics in both systems.
-- **isActive Field**: The `isActive` field is optional and treated with special handling. When `isActive: true` and all other status flags are `false`, TracOS maps to `"in_progress"` status. However, `isActive` is only returned to the client if they originally sent it.
-- **Perfect Field Symmetry**: The system implements perfect input-output symmetry. The client receives back exactly the same fields they originally sent:
-  - **Always returned**: The 5 core status fields (`isDone`, `isCanceled`, `isOnHold`, `isPending`, `isDeleted`) are always returned as they represent the client's standard data model.
-  - **Conditionally returned**: The `isActive` field is returned **only if** the client originally included it in their request, maintaining perfect field symmetry and preventing dependencies on fields the client never provided.
+- **isActive Field**: The `isActive` field is not supported in this implementation. It does not appear in the sample data and has no corresponding field in the TracOS data model. Only the 5 core status fields (`isDone`, `isCanceled`, `isOnHold`, `isPending`, `isDeleted`) are processed and returned.
 
 ## Project Structure
 

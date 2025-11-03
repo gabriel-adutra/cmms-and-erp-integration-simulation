@@ -20,13 +20,12 @@ class DataTranslator:
     VALID_TRACOS_STATUS = {
         "pending", "in_progress", "completed", "on_hold", "cancelled", "deleted"
     }
-    STATUS_PRIORITY_MAP = [
+    CLIENT_TO_TRACOS_STATUS_MAP = [
         ("isDeleted", "deleted"),
         ("isDone", "completed"),
         ("isCanceled", "cancelled"),
         ("isOnHold", "on_hold"),
-        ("isActive", "in_progress"),
-        ("isPending", "pending")
+        ("isPending", "pending"),
     ]
     
     
@@ -45,12 +44,12 @@ class DataTranslator:
     
     def _determine_tracos_status(self, client_data: Dict) -> str:
         # Check flags in priority order
-        for client_flag, tracos_status in self.STATUS_PRIORITY_MAP:
+        for client_flag, tracos_status in self.CLIENT_TO_TRACOS_STATUS_MAP:
             if client_data.get(client_flag, False):
                 logger.debug(f"Status determined: {client_flag}=True → {tracos_status}")
                 return tracos_status
         
-        # Default if no flag is True: in_progress (client doesn't have isActive field)
+        # Default if no flag is True: in_progress
         logger.debug("No specific status found. Using default: in_progress")
         return "in_progress"
     
