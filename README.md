@@ -78,6 +78,7 @@ The system handles all possible client status combinations with the following pr
 
 **Special Cases**: 
 - **Deleted Status**: When `isDeleted: true`, TracOS stores both `status: "deleted"` AND `deleted: true`. This dual mapping ensures proper handling of deletion semantics in both systems.
+- **In Progress Status**: Client systems do **not send** an explicit `isInProgress` field. Instead, "in_progress" status is represented implicitly when **all status flags are false**. Note: Even though `setup.py` includes "in_progress" in the random choice list, it only affects the generated client data when selected - resulting in all status flags being false (no explicit `isInProgress: true` is ever generated). This design reflects real-world ERP behavior where "in progress" is the default/working state.
 - **isActive Field**: The `isActive` field is not supported in this implementation. It does not appear in the sample data and has no corresponding field in the TracOS data model. Only the 5 core status fields (`isDone`, `isCanceled`, `isOnHold`, `isPending`, `isDeleted`) are processed and returned.
 
 ## Project Structure
