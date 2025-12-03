@@ -1,72 +1,72 @@
-# TracOS ↔ Client Integration System
+# CMMS ↔ ERP Integration System
 
 ## About the Project
 
-This project implements an asynchronous Python service that simulates a bidirectional integration between Tractian's TracOS CMMS and a customer's ERP system. The system synchronizes work orders between the two systems, performing inbound (Client → TracOS) and outbound (TracOS → Client) flows with data translation and validation.
+This project implements an asynchronous Python service that simulates a bidirectional integration between a **CMMS (Computerized Maintenance Management System)** and a customer's **ERP (Enterprise Resource Planning)** system. The system synchronizes work orders between the two systems, performing inbound (ERP → CMMS) and outbound (CMMS → ERP) flows with data translation and validation.
 
 ## Architecture
 
 The system was designed with a clear separation of responsibilities to make it easy to add new integrations without changing existing modules:
 
 ### Main Modules
-- `client_adapter.py` - Read/write operations with the client system (JSON files).
-- `tracos_adapter.py` - Read/write operations with the TracOS system (MongoDB).
+- `client_adapter.py` - Read/write operations with the ERP system (simulated by JSON files).
+- `cmms_adapter.py` - Read/write operations with the CMMS system (MongoDB).
 - `translator.py` - Bidirectional data translation between systems.
 - `mongoDB.py` - Shared MongoDB service: connection singleton, health check, and retry helpers for adapters. This module centralizes database concerns so any current or future adapters can reuse a single, well-tested access layer.
 - `config.py` - Centralized configuration via environment variables.
 - `main.py` - Main orchestrator of the integration pipeline.
 
 ### System Characteristics
-- Asynchronous: Non-blocking MongoDB operations for better performance.
-- Resilient: Robust handling of I/O errors and transient network failures.
-- Idempotent: Safe operations for retry using upsert with unique keys.
-- Extensible: Modular architecture enables adding new systems easily.
+- **Asynchronous**: Non-blocking MongoDB operations for better performance.
+- **Resilient**: Robust handling of I/O errors and transient network failures.
+- **Idempotent**: Safe operations for retry using upsert with unique keys.
+- **Extensible**: Modular architecture enables adding new systems easily.
 
 ### Technical Highlights Implemented
-- Configuration Singleton Pattern: Centralized configuration loaded once per process.
-- Resource Management: Smart reuse of MongoDB connections with cleanup.
-- Strict Validation: Required fields and types validated with specific error messages.
-- Failure Isolation: A problematic file doesn't stop the entire pipeline.
+- **Configuration Singleton Pattern**: Centralized configuration loaded once per process.
+- **Resource Management**: Smart reuse of MongoDB connections with cleanup.
+- **Strict Validation**: Required fields and types validated with specific error messages.
+- **Failure Isolation**: A problematic file doesn't stop the entire pipeline.
 
 ### Design Decisions and Rationale
-- Dedicated `mongoDB.py` module:
+- **Dedicated `mongoDB.py` module**:
   - Single place for connection lifecycle, health checks, and retry behavior.
   - Encourages reuse by any adapter that needs MongoDB, reducing duplication and drift.
   - Makes it simple to evolve cross-cutting DB policies (timeouts, retry rules) without touching business modules.
-- Object-Oriented modules (adapters, translator):
+- **Object-Oriented modules (adapters, translator)**:
   - Encapsulation of behavior and state enables easy extension as the application grows.
   - Clear constructor parameters make new capabilities discoverable (e.g., toggling options, injecting collaborators).
   - Improved testability via dependency injection and explicit lifecycles.
   - Future-proofing: when adding new adapters or changing data sources, we can extend classes and pass new parameters rather than rewriting global functions.
-- Dependency Injection in `main.py`:
+- **Dependency Injection in `main.py`**:
   - Instances are created and wired at the composition root (no module-level singletons).
   - Promotes isolation across runs and prevents import-time side effects.
 
 ## How the System Works
 
-### Inbound Flow (Client → TracOS)
-1. Read: Processes JSON files from the `data/inbound/` folder (simulating client API responses).
-2. Validate: Checks required fields (`orderNo`, `summary`, `creationDate`).
-3. Translate: Converts client format to TracOS format (e.g., boolean statuses → enums).
-4. Persist: Saves/updates records in MongoDB with `isSynced=false`.
+### Inbound Flow (ERP → CMMS)
+1. **Read**: Processes JSON files from the `data/inbound/` folder (simulating ERP API responses).
+2. **Validate**: Checks required fields (`orderNo`, `summary`, `creationDate`).
+3. **Translate**: Converts ERP format to CMMS format (e.g., boolean statuses → enums).
+4. **Persist**: Saves/updates records in MongoDB with `isSynced=false`.
 
-### Outbound Flow (TracOS → Client)
-1. Query: Fetches work orders in MongoDB with `isSynced=false`.
-2. Translate: Converts TracOS format to the client format.
-3. Generate: Creates JSON files in `data/outbound/` (ready to be "sent" to the client).
-4. Mark: Updates records in MongoDB with `isSynced=true` and `syncedAt` timestamp.
+### Outbound Flow (CMMS → ERP)
+1. **Query**: Fetches work orders in MongoDB with `isSynced=false`.
+2. **Translate**: Converts CMMS format to the ERP format.
+3. **Generate**: Creates JSON files in `data/outbound/` (ready to be "sent" to the ERP).
+4. **Mark**: Updates records in MongoDB with `isSynced=true` and `syncedAt` timestamp.
 
 ### Data Normalization
-- Dates: Normalized to UTC ISO 8601.
-- Status: Mapping between enums (client uses booleans, TracOS uses strings).
-- Fields: Translation between different names and structures.
+- **Dates**: Normalized to UTC ISO 8601.
+- **Status**: Mapping between enums (ERP uses booleans, CMMS uses strings).
+- **Fields**: Translation between different names and structures.
 
 ### Status Mapping Business Rules
 
-The system handles all possible client status combinations with the following priority-based mapping:
+The system handles all possible ERP status combinations with the following priority-based mapping:
 
-| Client Status | Client Flags | TracOS Fields | TracOS → Client |
-|---------------|--------------|---------------|-----------------|
+| ERP Status | ERP Flags | CMMS Fields | CMMS → ERP |
+|---|---|---|---|
 | **Deleted** | `isDeleted: true` | `status: "deleted"` + `deleted: true` | All status flags returned: `isDeleted: true`, others `false` |
 | **Completed** | `isDone: true` | `status: "completed"` | All status flags returned: `isDone: true`, others `false` |
 | **Cancelled** | `isCanceled: true` | `status: "cancelled"` | All status flags returned: `isCanceled: true`, others `false` |
@@ -77,25 +77,25 @@ The system handles all possible client status combinations with the following pr
 **Priority Order**: The system checks flags in the order listed above. The first `true` flag determines the status.
 
 **Special Cases**: 
-- **Deleted Status**: When `isDeleted: true`, TracOS stores both `status: "deleted"` AND `deleted: true`. This dual mapping ensures proper handling of deletion semantics in both systems.
-- **In Progress Status**: Client systems do **not send** an explicit `isInProgress` field. Instead, "in_progress" status is represented implicitly when **all status flags are false**. Note: Even though `setup.py` includes "in_progress" in the random choice list, it only affects the generated client data when selected - resulting in all status flags being false (no explicit `isInProgress: true` is ever generated). This design reflects real-world ERP behavior where "in progress" is the default/working state.
-- **isActive Field**: The `isActive` field is not supported in this implementation. It does not appear in the sample data and has no corresponding field in the TracOS data model. Only the 5 core status fields (`isDone`, `isCanceled`, `isOnHold`, `isPending`, `isDeleted`) are processed and returned.
+- **Deleted Status**: When `isDeleted: true`, CMMS stores both `status: "deleted"` AND `deleted: true`. This dual mapping ensures proper handling of deletion semantics in both systems.
+- **In Progress Status**: ERP systems do **not send** an explicit `isInProgress` field. Instead, "in_progress" status is represented implicitly when **all status flags are false**. Note: Even though `setup.py` includes "in_progress" in the random choice list, it only affects the generated client data when selected - resulting in all status flags being false (no explicit `isInProgress: true` is ever generated). This design reflects real-world ERP behavior where "in progress" is the default/working state.
+- **isActive Field**: The `isActive` field is not supported in this implementation. It does not appear in the sample data and has no corresponding field in the CMMS data model. Only the 5 core status fields (`isDone`, `isCanceled`, `isOnHold`, `isPending`, `isDeleted`) are processed and returned.
 
 ## Project Structure
 
 ```
-tractian_integrations_engineering_technical_test/
+cmms_erp_integration/
 ├── docker-compose.yml              # MongoDB container
 ├── pyproject.toml                  # Poetry dependencies
 ├── setup.py                        # Initialization script with sample data
 ├── .env                            # Environment variables
 ├── data/
-│   ├── inbound/                    # Input JSON files (Client → TracOS)
-│   └── outbound/                   # Output JSON files (TracOS → Client)
+│   ├── inbound/                    # Input JSON files (ERP → CMMS)
+│   └── outbound/                   # Output JSON files (CMMS → ERP)
 ├── src/
 │   ├── main.py                     # Main script - runs the full pipeline
-│   ├── client_adapter.py           # Module for client system operations
-│   ├── tracos_adapter.py           # Module for TracOS system operations
+│   ├── client_adapter.py           # Module for ERP system operations
+│   ├── cmms_adapter.py             # Module for CMMS system operations
 │   ├── translator.py               # Module for format translation
 │   ├── mongoDB.py                  # Shared MongoDB service (connection, health, retry)
 │   └── config.py                   # Centralized configuration
@@ -116,13 +116,13 @@ Make sure you have installed:
 
 Clone this repository:
 ```bash
-git clone https://github.com/gabriel-adutra/cmms-and-erp-integration-simulation.git
-cd cmms-and-erp-integration-simulation
+git clone <repository-url>
+cd cmms-erp-integration
 ```
 
 Before running the commands below, navigate to the project directory:
 ```bash
-cd tractian_integrations_engineering_technical_test/
+cd cmms_erp_integration/
 ```
 
 ### 1. Install Dependencies
@@ -145,7 +145,7 @@ docker ps
 
 ### 3. Initialize Sample Data
 ```bash
-# Create sample data (TracOS + Client)
+# Create sample data (CMMS + ERP)
 poetry run python setup.py
 ```
 
@@ -176,7 +176,7 @@ poetry run pytest -v -s
 
 ### What the Tests Validate
 - Full pipeline: inbound flow → MongoDB → outbound.
-- Correct data translation between Client ↔ TracOS formats.
+- Correct data translation between ERP ↔ CMMS formats.
 - Integrity: for existing inbound files, output data matches input (idempotence on business fields).
 - Pre-conditions: test fails fast if inbound directory is empty or MongoDB is down.
 - Sync semantics: validates that only inbound orderNos are marked as `isSynced=true` in Mongo.
@@ -217,8 +217,8 @@ ls data/inbound/
 ### Environment Variables
 The `.env` file contains the required settings:
 ```bash
-MONGO_URI=mongodb://localhost:27017/tractian
-MONGO_DATABASE=tractian
+MONGO_URI=mongodb://localhost:27017/cmms_db
+MONGO_DATABASE=cmms_db
 MONGO_COLLECTION=workorders
 DATA_INBOUND_DIR=./data/inbound  
 DATA_OUTBOUND_DIR=./data/outbound
@@ -229,7 +229,7 @@ DATA_OUTBOUND_DIR=./data/outbound
 - Precedence: exported environment variables > values from `.env` > code defaults.
 - Safe defaults: if there's no export and no `.env`, default values are used:
   - `MONGO_URI = mongodb://localhost:27017`
-  - `MONGO_DATABASE=tractian`
+  - `MONGO_DATABASE=cmms_db`
   - `MONGO_COLLECTION=workorders`
   - `DATA_INBOUND_DIR = ./data/inbound`
   - `DATA_OUTBOUND_DIR = ./data/outbound`
@@ -247,10 +247,10 @@ These are the technical characteristics implemented in this repository.
 - Single end-to-end test covering the full pipeline and preconditions (inbound and DB).
 
 ### Logging Policy
-- INFO: processing milestones (pipeline start/end, totals processed, configuration success).
-- DEBUG: details and payloads (e.g., full record contents), useful for local investigation.
-- WARNING: recoverable anomalous situations (e.g., invalid file ignored).
-- ERROR: non-recoverable failures for the current step (e.g., error after all retry attempts).
+- **INFO**: processing milestones (pipeline start/end, totals processed, configuration success).
+- **DEBUG**: details and payloads (e.g., full record contents), useful for local investigation.
+- **WARNING**: recoverable anomalous situations (e.g., invalid file ignored).
+- **ERROR**: non-recoverable failures for the current step (e.g., error after all retry attempts).
 Recommendation: use INFO for day-to-day; enable DEBUG only for diagnostics.
 
 
@@ -267,7 +267,7 @@ This section tracks the project's status against the official requirements docum
 
 ## Data Examples
 
-### Inbound Work Order - Client input:
+### Inbound Work Order - ERP input:
 ```json
 {
   "orderNo": 1,
@@ -283,7 +283,7 @@ This section tracks the project's status against the official requirements docum
 }
 ```
 
-### Work Order in TracOS (Internal MongoDB) after conversion (Client → TracOS):
+### Work Order in CMMS (Internal MongoDB) after conversion (ERP → CMMS):
 ```json
 {
   "_id": "ObjectId('69029d7dbc2225d88a00780d')",
@@ -298,7 +298,7 @@ This section tracks the project's status against the official requirements docum
 }
 ```
 
-### Work Order in Outbound after conversion (TracOS → Client):
+### Work Order in Outbound after conversion (CMMS → ERP):
 ```json
 {
   "orderNo": 1,
@@ -316,7 +316,7 @@ This section tracks the project's status against the official requirements docum
 
 Note: MongoDB stores datetimes with millisecond precision; microseconds may be truncated (e.g., 374263 → 374000).
 
-### Work Order in TracOS (Internal MongoDB) after synchronization:
+### Work Order in CMMS (Internal MongoDB) after synchronization:
 ```json
 {
   "_id": "ObjectId('69029d7dbc2225d88a00780d')",
@@ -334,4 +334,4 @@ Note: MongoDB stores datetimes with millisecond precision; microseconds may be t
 
 ---
 
-*TracOS ↔ Client integration system implemented with a focus on modularity, resilience, and ease of extension to new systems.*
+*CMMS ↔ ERP integration system implemented with a focus on modularity, resilience, and ease of extension to new systems.*
