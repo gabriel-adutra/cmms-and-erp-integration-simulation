@@ -116,7 +116,7 @@ Make sure you have installed:
 
 Clone this repository:
 ```bash
-git clone <repository-url>
+git clone https://github.com/gabriel-adutra/cmms-and-erp-integration-simulation.git
 cd cmms-erp-integration
 ```
 
