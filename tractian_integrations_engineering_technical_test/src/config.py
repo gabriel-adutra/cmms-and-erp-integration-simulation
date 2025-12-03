@@ -1,4 +1,4 @@
-"""Centralized configuration for the TracOS ↔ Client integration."""
+"""Centralized configuration for the CMMS ↔ Client integration."""
 
 from pathlib import Path
 from loguru import logger
@@ -20,9 +20,9 @@ class Config:
         if self._initialized:
             return None
 
-        logger.debug("Initializing TracOS ↔ Client integration configuration.")    
+        logger.debug("Initializing CMMS ↔ Client integration configuration.")    
         self.MONGO_URI = dconfig("MONGO_URI", default="mongodb://localhost:27017")
-        self.MONGO_DATABASE = dconfig("MONGO_DATABASE", default="tractian")
+        self.MONGO_DATABASE = dconfig("MONGO_DATABASE", default="cmms_db")
         self.MONGO_COLLECTION = dconfig("MONGO_COLLECTION", default="workorders")
         
         self.DATA_INBOUND_DIR = Path(dconfig("DATA_INBOUND_DIR", default="./data/inbound"))

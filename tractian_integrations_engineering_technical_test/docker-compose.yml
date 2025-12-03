@@ -1,14 +1,14 @@
 services:
   mongo:
     image: mongo:5.0
-    container_name: tractian-mongo
+    container_name: cmms-mongo
     ports:
       - "27017:27017"
     volumes:
       - mongo-data:/data/db
     environment:
       # optional: create a default database
-      MONGO_INITDB_DATABASE: tractian
+      MONGO_INITDB_DATABASE: cmms_db
 
 volumes:
   mongo-data:

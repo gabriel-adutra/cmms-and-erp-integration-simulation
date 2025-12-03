@@ -1,19 +1,19 @@
-""" Main pipeline for TracOS ↔ Client integration.
-This module orchestrates the end-to-end bidirectional synchronization between Client and TracOS systems.
+""" Main pipeline for CMMS ↔ Client integration.
+This module orchestrates the end-to-end bidirectional synchronization between Client and CMMS systems.
 """
 
 import asyncio
 from loguru import logger
 from client_adapter import ClientAdapter  
-from tracos_adapter import TracosAdapter
+from cmms_adapter import CMMSAdapter
 from mongoDB import MongoService
 from translator import DataTranslator
 
 
-async def inbound_flow(client_adapter: ClientAdapter, tracos_adapter: TracosAdapter, translator: DataTranslator):
-    """Inbound flow: Client → TracOS. Reads client JSON files, converts to TracOS format, and saves to MongoDB."""
+async def inbound_flow(client_adapter: ClientAdapter, cmms_adapter: CMMSAdapter, translator: DataTranslator):
+    """Inbound flow: Client → CMMS. Reads client JSON files, converts to CMMS format, and saves to MongoDB."""
 
-    logger.info("----------------- Starting inbound flow (Client → TracOS) -----------------")
+    logger.info("----------------- Starting inbound flow (Client → CMMS) -----------------")
     
     files_data = client_adapter.read_inbound_files()
     if not files_data:
@@ -26,34 +26,34 @@ async def inbound_flow(client_adapter: ClientAdapter, tracos_adapter: TracosAdap
                 logger.warning(f"Invalid data: {client_data.get('orderNo', 'N/A')}")
                 continue
                 
-            tracos_data = translator.convert_client_to_tracos(client_data)
+            cmms_data = translator.convert_client_to_cmms(client_data)
             
-            await tracos_adapter.upsert_workorder(tracos_data)
+            await cmms_adapter.upsert_workorder(cmms_data)
             
         except Exception as e:
             logger.error(f"Error during processing: {e}")
 
 
-async def outbound_flow(client_adapter: ClientAdapter, tracos_adapter: TracosAdapter, translator: DataTranslator):
-    """Outbound flow: TracOS → Client. Reads unsynced workorders from MongoDB, converts to Client format, and generates JSON files."""
+async def outbound_flow(client_adapter: ClientAdapter, cmms_adapter: CMMSAdapter, translator: DataTranslator):
+    """Outbound flow: CMMS → Client. Reads unsynced workorders from MongoDB, converts to Client format, and generates JSON files."""
 
-    logger.info("----------------- Starting outbound flow (TracOS → Client) -----------------")
+    logger.info("----------------- Starting outbound flow (CMMS → Client) -----------------")
     
-    workorders = await tracos_adapter.read_unsynced_workorders()
+    workorders = await cmms_adapter.read_unsynced_workorders()
     if not workorders:
         return None
     
     logger.debug(f"Processing {len(workorders)} workorder(s) found.")
 
-    for tracos_data in workorders:
+    for cmms_data in workorders:
         try:
-            client_data = translator.convert_tracos_to_client(tracos_data)
+            client_data = translator.convert_cmms_to_client(cmms_data)
 
-            workorder_number = tracos_data['number']
+            workorder_number = cmms_data['number']
             filename = f"workorder_{workorder_number}.json"
             success = client_adapter.write_outbound_file(filename, client_data)
             if success:
-                await tracos_adapter.mark_workorder_as_synced(workorder_number)
+                await cmms_adapter.mark_workorder_as_synced(workorder_number)
                 
         except Exception as e:
             logger.error(f"Error during processing: {e}")
@@ -72,11 +72,11 @@ async def main():
             return
 
         client_adapter = ClientAdapter()
-        tracos_adapter = TracosAdapter()
+        cmms_adapter = CMMSAdapter()
         translator = DataTranslator()
 
-        await inbound_flow(client_adapter, tracos_adapter, translator)
-        await outbound_flow(client_adapter, tracos_adapter, translator)
+        await inbound_flow(client_adapter, cmms_adapter, translator)
+        await outbound_flow(client_adapter, cmms_adapter, translator)
 
         logger.info("=============== PIPELINE COMPLETED SUCCESSFULLY ===============")
 

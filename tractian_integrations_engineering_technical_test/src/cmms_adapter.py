@@ -1,4 +1,4 @@
-"""Adapter responsible for MongoDB operations for TracOS."""
+"""Adapter responsible for MongoDB operations for CMMS."""
 from typing import List, Dict
 from datetime import datetime, timezone
 from pymongo.errors import (PyMongoError)
@@ -7,13 +7,13 @@ from loguru import logger
 from mongoDB import MongoService
 
 
-class TracosAdapter:
+class CMMSAdapter:
 
     def __init__(self):
-        logger.info("TracosAdapter initialized...")
+        logger.info("CMMSAdapter initialized...")
         self._mongo = MongoService()
         self._config = Config()
-        logger.info("TracosAdapter ready for operations with TracOS MongoDB.")
+        logger.info("CMMSAdapter ready for operations with CMMS MongoDB.")
 
     async def get_workorders_collection(self):
         return await self._mongo.get_collection(self._config.MONGO_COLLECTION)
@@ -32,7 +32,7 @@ class TracosAdapter:
                 doc["_id"] = str(doc["_id"])
                 workorders.append(doc)
             
-            logger.info(f"Found {len(workorders)} unsynced workorder(s) in TracOS.")
+            logger.info(f"Found {len(workorders)} unsynced workorder(s) in CMMS.")
             return workorders
         
         try:
@@ -56,7 +56,7 @@ class TracosAdapter:
                 "updatedAt": datetime.now(timezone.utc)
             })
  
-            logger.debug(f"Workorder with number={workorder_data['number']} marked as not synced in TracOS. (isSynced=False)")
+            logger.debug(f"Workorder with number={workorder_data['number']} marked as not synced in CMMS. (isSynced=False)")
             
             # Upsert: update if exists, insert if not, removing syncedAt
             result = await collection.update_one(
@@ -93,10 +93,10 @@ class TracosAdapter:
             )
             
             if result.modified_count > 0:
-                logger.debug(f"Workorder with number={number} synced in TracOS. (isSynced=True).")
+                logger.debug(f"Workorder with number={number} synced in CMMS. (isSynced=True).")
                 return True
             else:
-                logger.warning(f"Workorder with number={number} not found in TracOS.")
+                logger.warning(f"Workorder with number={number} not found in CMMS.")
                 return False
         
         try:

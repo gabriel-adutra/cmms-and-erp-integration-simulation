@@ -1,4 +1,4 @@
-"""End-to-end integration tests for the TracOS ↔ Client system."""
+"""End-to-end integration tests for the CMMS ↔ Client system."""
 
 import json
 import asyncio
@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from config import Config
 from main import main
-from tracos_adapter import TracosAdapter
+from cmms_adapter import CMMSAdapter
 from mongoDB import MongoService
 
 
@@ -114,7 +114,7 @@ async def validate_data_integrity(inbound_files: list[Path], config: Config):
 
 async def validate_sync_status(order_nos: list[int]):
     """Validate that records corresponding to inbound order_nos were marked as isSynced=true."""
-    adapter = TracosAdapter()
+    adapter = CMMSAdapter()
     collection = await adapter.get_workorders_collection()
     
     if not order_nos:

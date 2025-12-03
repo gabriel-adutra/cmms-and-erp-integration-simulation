@@ -1,7 +1,7 @@
 """
-Data translator between Client and TracOS formats.
+Data translator between Client and CMMS formats.
 This module implements business rules for bidirectional conversion
-between Client and TracOS systems, ensuring schema compliance and
+between Client and CMMS systems, ensuring schema compliance and
 proper handling of special cases.
 """
 
@@ -14,13 +14,13 @@ import json
 class DataTranslator:
 
     def __init__(self):
-        logger.info("DataTranslator ready for data conversion (Client ↔ TracOS).")
+        logger.info("DataTranslator ready for data conversion (Client ↔ CMMS).")
 
     
-    VALID_TRACOS_STATUS = {
+    VALID_CMMS_STATUS = {
         "pending", "in_progress", "completed", "on_hold", "cancelled", "deleted"
     }
-    CLIENT_TO_TRACOS_STATUS_MAP = [
+    CLIENT_TO_CMMS_STATUS_MAP = [
         ("isDeleted", "deleted"),
         ("isDone", "completed"),
         ("isCanceled", "cancelled"),
@@ -42,12 +42,12 @@ class DataTranslator:
             raise ValueError(f"Invalid date in field '{field_name}': {date_string}")
     
     
-    def _determine_tracos_status(self, client_data: Dict) -> str:
+    def _determine_cmms_status(self, client_data: Dict) -> str:
         # Check flags in priority order
-        for client_flag, tracos_status in self.CLIENT_TO_TRACOS_STATUS_MAP:
+        for client_flag, cmms_status in self.CLIENT_TO_CMMS_STATUS_MAP:
             if client_data.get(client_flag, False):
-                logger.debug(f"Status determined: {client_flag}=True → {tracos_status}")
-                return tracos_status
+                logger.debug(f"Status determined: {client_flag}=True → {cmms_status}")
+                return cmms_status
         
         # Default if no flag is True: in_progress
         logger.debug("No specific status found. Using default: in_progress")
@@ -63,13 +63,13 @@ class DataTranslator:
             raise KeyError(error_msg)
 
     
-    def convert_client_to_tracos(self, client_data: Dict) -> Dict:
+    def convert_client_to_cmms(self, client_data: Dict) -> Dict:
 
         required_fields = ["orderNo", "summary", "creationDate"]
         self._validate_required_fields(client_data, required_fields, "client data")
     
-        status = self._determine_tracos_status(client_data)
-        if status not in self.VALID_TRACOS_STATUS:
+        status = self._determine_cmms_status(client_data)
+        if status not in self.VALID_CMMS_STATUS:
             error_msg = f"Invalid status generated: {status}"
             logger.error(error_msg)
             raise ValueError(error_msg)
@@ -80,8 +80,8 @@ class DataTranslator:
         update_date_str = client_data.get("lastUpdateDate", client_data["creationDate"])
         updated_at = self.convert_iso_to_datetime(update_date_str, "lastUpdateDate/creationDate")
         
-        # Build TracOS data
-        tracos_data = {
+        # Build CMMS data
+        cmms_data = {
             "number": client_data["orderNo"],
             "title": client_data["summary"],
             "status": status,
@@ -93,33 +93,33 @@ class DataTranslator:
         
         # Add deletedAt if the workorder was deleted and has a deletion date
         if client_data.get("isDeleted") and client_data.get("deletedDate"):
-            tracos_data["deletedAt"] = self.convert_iso_to_datetime(
+            cmms_data["deletedAt"] = self.convert_iso_to_datetime(
                 client_data["deletedDate"], "deletedDate"
             )
 
         logger.debug(
-            f"Client data converted to TracOS data for workorder with orderNo={client_data['orderNo']}:\n"
-            f"{json.dumps({'Client data': client_data, 'TracOS data': tracos_data}, indent=2, ensure_ascii=False, default=str)}"
+            f"Client data converted to CMMS data for workorder with orderNo={client_data['orderNo']}:\n"
+            f"{json.dumps({'Client data': client_data, 'CMMS data': cmms_data}, indent=2, ensure_ascii=False, default=str)}"
         )
                 
-        return tracos_data
+        return cmms_data
     
     
-    def convert_tracos_to_client(self, tracos_data: Dict) -> Dict:
+    def convert_cmms_to_client(self, cmms_data: Dict) -> Dict:
         
         required_fields = ["number", "title", "status", "createdAt", "updatedAt"]
-        self._validate_required_fields(tracos_data, required_fields, "TracOS data")
+        self._validate_required_fields(cmms_data, required_fields, "CMMS data")
         
-        status = tracos_data["status"]
-        if status not in self.VALID_TRACOS_STATUS:
-            error_msg = f"Invalid TracOS status: {status}"
+        status = cmms_data["status"]
+        if status not in self.VALID_CMMS_STATUS:
+            error_msg = f"Invalid CMMS status: {status}"
             logger.error(error_msg)
             raise ValueError(error_msg)
         
         # Convert datetimes to ISO strings with explicit UTC offset (+00:00)
         try:
-            created_dt = tracos_data["createdAt"]
-            updated_dt = tracos_data["updatedAt"]
+            created_dt = cmms_data["createdAt"]
+            updated_dt = cmms_data["updatedAt"]
 
             if created_dt.tzinfo is None:
                 created_dt = created_dt.replace(tzinfo=timezone.utc)
@@ -130,17 +130,17 @@ class DataTranslator:
             update_date = updated_dt.isoformat()
         except AttributeError as e:
             logger.error(f"Error converting datetimes to ISO: {e}")
-            raise ValueError(f"TracOS datetimes must be datetime objects: {e}")
+            raise ValueError(f"CMMS datetimes must be datetime objects: {e}")
         
-        # Build client data with boolean flags based on TracOS status
+        # Build client data with boolean flags based on CMMS status
         client_data = {
-            "orderNo": tracos_data["number"],
-            "summary": tracos_data["title"],
+            "orderNo": cmms_data["number"],
+            "summary": cmms_data["title"],
             "creationDate": creation_date,
             "lastUpdateDate": update_date,
             "deletedDate": (
-                tracos_data["deletedAt"].isoformat() 
-                if tracos_data.get("deletedAt") else None
+                cmms_data["deletedAt"].isoformat() 
+                if cmms_data.get("deletedAt") else None
             ),
             # Boolean flags - always return the 5 basic fields (client always sends them)
             "isDone": status == "completed",
@@ -151,8 +151,8 @@ class DataTranslator:
         }
         
         logger.debug(
-            f"TracOS data converted to Client data for workorder with number={tracos_data['number']}:\n"
-            f"{json.dumps({'TracOS data': tracos_data, 'Client data': client_data}, indent=2, ensure_ascii=False, default=str)}"
+            f"CMMS data converted to Client data for workorder with number={cmms_data['number']}:\n"
+            f"{json.dumps({'CMMS data': cmms_data, 'Client data': client_data}, indent=2, ensure_ascii=False, default=str)}"
         )
         
         return client_data

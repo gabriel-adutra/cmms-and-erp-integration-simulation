@@ -12,7 +12,7 @@ from loguru import logger
 
 # ----- CONFIG -----
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
-MONGO_DATABASE = os.getenv("MONGO_DATABASE", "tractian")
+MONGO_DATABASE = os.getenv("MONGO_DATABASE", "cmms_db")
 MONGO_COLLECTION = os.getenv("MONGO_COLLECTION", "workorders")
 DATA_INBOUND_DIR = os.getenv("DATA_INBOUND_DIR", "data/inbound")
 # ------------------
@@ -22,7 +22,7 @@ if not os.path.exists(DATA_INBOUND_DIR):
     os.makedirs(DATA_INBOUND_DIR)
 
 # Constants
-NUMBER_OF_WORKORDERS_SAMPLES_ON_TRACOS: int = 10
+NUMBER_OF_WORKORDERS_SAMPLES_ON_CMMS: int = 10
 NUMBER_OF_WORKORDERS_SAMPLES_ON_CUSTOMER_SYSTEM: int = 10
 
 
@@ -30,7 +30,7 @@ async def get_mongo_client() -> AsyncIOMotorClient:
     return AsyncIOMotorClient(MONGO_URI)
 
 
-class TracOSWorkorder(TypedDict):
+class CMMSWorkorder(TypedDict):
     _id: ObjectId
     number: int
     status: Literal["pending", "in_progress", "completed", "on_hold", "cancelled"]
@@ -57,11 +57,11 @@ class CustomerSystemWorkorder(TypedDict):
     deletedDate: datetime | None = None
 
 
-def create_tracos_sample_workorders() -> list[TracOSWorkorder]:
+def create_cmms_sample_workorders() -> list[CMMSWorkorder]:
     """Generate n sample workorder documents."""
     base = datetime.now(timezone.utc) - timedelta(days=30)
-    samples: list[TracOSWorkorder] = []
-    for i in range(1, NUMBER_OF_WORKORDERS_SAMPLES_ON_TRACOS + 1):
+    samples: list[CMMSWorkorder] = []
+    for i in range(1, NUMBER_OF_WORKORDERS_SAMPLES_ON_CMMS + 1):
         samples.append(
             {
                 "_id": ObjectId(),
@@ -105,9 +105,9 @@ def create_customer_system_sample_workorders() -> list[CustomerSystemWorkorder]:
     return samples
 
 
-async def create_tracos_workorder_on_mongo(
+async def create_cmms_workorder_on_mongo(
     collection: Collection,
-    workorders: list[TracOSWorkorder],
+    workorders: list[CMMSWorkorder],
 ) -> None:
     await collection.insert_many(workorders)
 
@@ -126,10 +126,10 @@ async def main():
     db = client.get_database(MONGO_DATABASE)
     collection = db.get_collection(MONGO_COLLECTION)
 
-    logger.info("Creating tracos workorders samples...")
-    tracos_workorder_samples = create_tracos_sample_workorders()
-    await create_tracos_workorder_on_mongo(collection, tracos_workorder_samples)
-    logger.info("TracOS workorders samples created.")
+    logger.info("Creating cmms workorders samples...")
+    cmms_workorder_samples = create_cmms_sample_workorders()
+    await create_cmms_workorder_on_mongo(collection, cmms_workorder_samples)
+    logger.info("CMMS workorders samples created.")
 
     logger.info("Creating customer system workorders samples...")
     customer_system_workorder_samples = create_customer_system_sample_workorders()
